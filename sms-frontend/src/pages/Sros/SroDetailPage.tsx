@@ -1,6 +1,8 @@
 // src/pages/Sros/SroDetailPage.tsx
 import React, { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "react-hot-toast";
+
 import {
   ArrowLeft,
   ClipboardCheck,
@@ -8,13 +10,14 @@ import {
   ShieldCheck,
   FileText, // ✅ NEW
 } from "lucide-react";
-import { useSro } from "../../api/sros";
-import { useApproveSroToSchedule } from "../../api/schedules";
+import { useSro , useApproveSroToSchedule} from "../../api/sros";
+
 import { useCallout } from "../../api/callout";
 
 export function SroDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  
 
   const { data, isLoading, error } = useSro(id);
   const approveMutation = useApproveSroToSchedule();
@@ -46,21 +49,24 @@ export function SroDetailPage() {
 
   const handleApproveOrGo = () => {
     if (!id) return;
-
-    // If schedule exists, go to schedule detail
+  
+    // If schedule exists, go to schedule detail (keep this if you want)
     if (hasSchedule) {
       navigate(`/schedules/${scheduleId}`);
       return;
     }
-
-    // Otherwise approve the SRO, then go to schedule create page with ?sro=<id>
+  
     approveMutation.mutate(Number(id), {
-      onSuccess: (_updatedSro: any) => {
-        // ✅ send user to schedule creation screen (NOT schedule detail)
-        navigate(`/schedules/new?sro=${id}`);
+      onSuccess: () => {
+        toast.success("SRO approved");
+        navigate(`/callouts`);
+      },
+      onError: () => {
+        toast.error("Failed to approve SRO");
       },
     });
   };
+  const isApproved = String(sro?.status || "").toLowerCase() === "approved";
 
   if (isLoading) return <div className="p-4 text-sm">Loading SRO…</div>;
 
@@ -206,11 +212,17 @@ export function SroDetailPage() {
               {/* Approve / Go schedule */}
               <PrimaryButton
                 onClick={handleApproveOrGo}
-                title={hasSchedule ? "Go to Schedule" : "Approve SRO"}
-                disabled={approveMutation.isLoading}
+                title={isApproved ? "SRO Approved" : hasSchedule ? "Go to Schedule" : "Approve SRO"}
+                disabled={approveMutation.isLoading || isApproved}
               >
                 <ClipboardCheck className="h-4 w-4" />
-                {approveMutation.isLoading ? "Processing…" : hasSchedule ? "Go to Schedule" : "Approve SRO"}
+                {approveMutation.isLoading
+                  ? "Processing…"
+                  : isApproved
+                  ? "SRO Approved"
+                  : hasSchedule
+                  ? "Go to Schedule"
+                  : "Approve SRO"}
               </PrimaryButton>
 
               {/* Back to Callout */}

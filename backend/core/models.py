@@ -1,10 +1,15 @@
 from django.db import models
+from decimal import Decimal
 from django.db.models import Max
 from django.core.validators import MinValueValidator, MaxValueValidator
 # Create your models here.
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.conf import settings
+from django.core.validators import RegexValidator
+from django.core.validators import EmailValidator
+from django.utils import timezone
+from datetime import date
 User = get_user_model()
 
 
@@ -29,12 +34,32 @@ class Rig(models.Model):
         return f"{self.name} ({self.client.code})"
 
 
+
 class ServiceType(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
 
     def __str__(self):
         return self.name
+
+class EquipmentType(models.Model):
+    equipment_name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.equipment_name
+
+class Resource(models.Model):
+    resource_name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.resouce_name
+
+
+class Field(models.Model):
+    field_name = models.CharField(max_length=255)
+    def __str__(self):
+        return self.field_name
+
 
 class Well(models.Model):
     name = models.CharField(max_length=255, unique=True)
@@ -55,9 +80,7 @@ class Well(models.Model):
     
     utm_northing = models.CharField(max_length=50, blank=True)
     utm_easting = models.CharField(max_length=50, blank=True)
-    ground_elevation_m = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
-    )
+    
     
     def __str__(self):
         return f"{self.name} - {self.well_id}"
@@ -67,9 +90,52 @@ class HoleSection(models.Model):
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True)
 
-    
     def __str__(self):
         return self.name
+class CasingSize(models.Model):
+    size = models.DecimalField(max_digits=6, decimal_places=3, unique=True)
+    display_name = models.CharField(max_length=50)
+    
+    def __str__(self):
+        return self.display_name
+
+class DrillpipeSize(models.Model):
+    size = models.DecimalField(max_digits=6, decimal_places=3, unique=True)
+    display_name = models.CharField(max_length=50)
+    
+    def __str__(self):
+        return self.display_name
+
+class MinimumIdSize(models.Model):
+    size = models.DecimalField(max_digits=6, decimal_places=3, unique=True)
+    display_name = models.CharField(max_length=50)
+    
+    def __str__(self):
+        return self.display_name
+
+class HoleSectionRelationship(models.Model):
+    hole_section = models.ForeignKey(HoleSection, on_delete=models.CASCADE, related_name="relationships")
+    
+    # Allowable casing sizes for this hole section
+    allowed_casing_sizes = models.ManyToManyField(
+        CasingSize,
+        blank=True,
+        related_name="hole_sections"
+    )
+    
+    # Allowable drillpipe sizes for this hole section
+    allowed_drillpipe_sizes = models.ManyToManyField(
+        DrillpipeSize,
+        blank=True,
+        related_name="hole_sections"
+    )
+    
+    class Meta:
+        unique_together = ['hole_section']
+    
+    def __str__(self):
+        return f"Relationships for {self.hole_section.name}"
+
 
 class Rig(models.Model):
     
@@ -92,12 +158,48 @@ class Callout(models.Model):
         ("draft", "Draft"),
         ("locked", "Locked"),
         ("sro_activated", "SRO Activated"),
-        ("scheduled", "Scheduled")
+        ("scheduled", "Scheduled"),
+        ("assigned", "Assigned")
+    ]
+    GROUND_ELEVATION_REF_CHOICES = [
+        ("MSL", "MSL (Mean Sea Level)"),
+        ("GL", "GL (Ground Level)"),
+        ("KB", "KB (Kelly Bushing)"),
+        ("DF", "DF (Derrick Floor)"),
+    ]
+    H2S_LEVEL_CHOICES = [
+        ("high", "High"),
+        ("medium", "Medium"),
+        ("low", "Low"),
     ]
 
     SERVICE_CATEGORY_CHOICES = [
         ("wireline_gyro", "Wireline Gyro Surveys"),
         ("memory_gyro", "Memory Gyro Surveys"),
+    ]
+    PIPE_SELECTION_TYPE_CHOICES = [
+        ("casing", "Casing"),
+        ("drillpipe", "Drillpipe"),
+    ]
+    CASING_SIZE_CHOICES = [
+        (Decimal("13.375"), '13 3/8"'),
+        (Decimal("9.625"),  '9 5/8"'),
+        (Decimal("7.0"),    '7"'),
+    ]
+
+    DRILLPIPE_SIZE_CHOICES = [
+        (Decimal("4.5"), '4 1/2"'),
+        (Decimal("5.0"), '5"'),
+    ]
+
+    MINIMUM_ID_CHOICES = [
+        (Decimal("2.0"), '2"'),
+    ]
+    WELL_PROFILE_CHOICES = [
+    ("vertical", "Vertical"),
+    ("S-shape", "S-shape"),
+    ("J-shape", "J-shape"),
+    ("horizontal", "Horizontal"),
     ]
 
     # 🔹 NEW: numeric sequence and formatted callout number
@@ -109,8 +211,14 @@ class Callout(models.Model):
     )
 
     # --- references ---
-    rig_number = models.CharField(max_length=255)
-    field_name = models.CharField(max_length=255, blank=True)
+    rig_number = models.ForeignKey('Rig', on_delete=models.PROTECT, related_name="callouts", null=True, blank=True)
+    field_name = models.ForeignKey(
+    "Field",
+    on_delete=models.PROTECT,
+    related_name="callouts",
+    null=True,
+    blank=True,)
+
     customer = models.ForeignKey(
         "Customer", on_delete=models.PROTECT, related_name="callouts", null=True, blank=True
     )
@@ -182,13 +290,19 @@ class Callout(models.Model):
     utm_easting = models.CharField(max_length=50, blank=True)
 
     casing_size_inch = models.DecimalField(
-        max_digits=6, decimal_places=2, null=True, blank=True
+        max_digits=6, decimal_places=3, null=True, blank=True
     )
     drillpipe_size_inch = models.DecimalField(
         max_digits=6, decimal_places=2, null=True, blank=True
     )
     minimum_id_inch = models.DecimalField(
         max_digits=6, decimal_places=2, null=True, blank=True
+    )
+    ground_elevation_ref = models.CharField(
+        max_length=10,
+        choices=GROUND_ELEVATION_REF_CHOICES,
+        blank=True,
+        default="",
     )
 
     ground_elevation_m = models.DecimalField(
@@ -200,12 +314,20 @@ class Callout(models.Model):
     maximum_inclination_deg = models.DecimalField(
         max_digits=5, decimal_places=2, null=True, blank=True
     )
-    well_profile = models.CharField(max_length=100, blank=True)
+    well_profile = models.CharField(
+    max_length=20,
+    choices=WELL_PROFILE_CHOICES,
+    blank=True,
+    default="",)
     max_downhole_temp_c = models.DecimalField(
         max_digits=5, decimal_places=2, null=True, blank=True
     )
-    h2s_level = models.CharField(max_length=100, blank=True)
-
+    h2s_level = models.CharField(
+        max_length=10,
+        choices=H2S_LEVEL_CHOICES,
+        blank=True,
+        default="",
+    )
     # ------------------------------------------------------------------
     # 4. SURVEY INFORMATION
     # ------------------------------------------------------------------
@@ -238,6 +360,13 @@ class Callout(models.Model):
     equipment_required_time = models.TimeField(null=True, blank=True)
     crew_required_date = models.DateField(null=True, blank=True)
     crew_required_time = models.TimeField(null=True, blank=True)
+
+    pipe_selection_type = models.CharField(
+        max_length=20,
+        choices=PIPE_SELECTION_TYPE_CHOICES,
+        null=True,
+        blank=True,
+    )
 
     # ------------------------------------------------------------------
     # 5. CONTACT INFORMATION & COMMENTS
@@ -278,6 +407,19 @@ class Callout(models.Model):
         if self.callout_sequence:
             self.callout_number = f"CALL_OUT_{self.callout_sequence}_{safe_customer}"
 
+        if self.pipe_selection_type == "casing":
+            self.drillpipe_size_inch = None
+        elif self.pipe_selection_type == "drillpipe":
+            self.casing_size_inch = None
+
+        # 2) Auto-set minimum_id to 2" if any size is selected
+        if self.casing_size_inch is not None or self.drillpipe_size_inch is not None:
+            self.minimum_id_inch = Decimal("2.0")
+
+        
+
+        
+
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -285,6 +427,7 @@ class Callout(models.Model):
         if self.callout_number:
             return self.callout_number
         return f"Callout #{self.pk}"
+
 
 
 class SRO(models.Model):
@@ -383,6 +526,7 @@ class Schedule(models.Model):
         ("draft", "Draft"),
         ("planned", "Planned"),
         ("approved", "Approved"),
+        ("assigned", "Assigned"),
         ("cancelled", "Cancelled"),
     ]
 
@@ -438,8 +582,22 @@ class Schedule(models.Model):
     )
     hse_risk = models.BooleanField(null=True, blank=True)
 
-    type_of_equipment = models.CharField(max_length=255, blank=True)
-    resource = models.CharField(max_length=255, blank=True)
+    type_of_equipment = models.ForeignKey(
+        EquipmentType,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="schedules",
+    )
+
+    resource = models.ForeignKey(
+        Resource,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="schedules",
+    )
+    scheduled_date = models.DateTimeField()
 
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -500,7 +658,231 @@ class Schedule(models.Model):
                 callout.status = "scheduled"
                 callout.save(update_fields=["status"])
 
+class Asset(models.Model):
+    STATUS_CHOICES = [
+        ("on_duty", "On Duty"),
+        ("yellow", "Yellow"),
+        ("green", "Green"),
+        ("upgraded", "Upgraded"),
+        ("off_duty", "Off Duty"),
+        ("maintenance", "Maintenance"),
+        ("breakdown", "Breakdown"),
+    ]
+
+    account_code = models.CharField(max_length=100, blank=True, null=True)
+
+    # ✅ UNIQUE
+    asset_code = models.CharField(max_length=100, unique=True)
+
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default="on_duty")
+
+    cost_center = models.CharField(max_length=150, blank=True, null=True)
+    department = models.CharField(max_length=150, blank=True, null=True)
+    asset_group = models.CharField(max_length=150, blank=True, null=True)
+    physical_location = models.CharField(max_length=200, blank=True, null=True)
+    asset_main_category = models.CharField(max_length=150, blank=True, null=True)
+    asset_sub_category = models.CharField(max_length=150, blank=True, null=True)
+    asset_description = models.TextField(blank=True, null=True)
+
+    serial_no = models.CharField(max_length=200, blank=True, null=True)
+    part_no = models.CharField(max_length=200, blank=True, null=True)
+    mfg_serial = models.CharField(max_length=200, blank=True, null=True)
+    manufacturer = models.CharField(max_length=200, blank=True, null=True)
+
+    comments = models.TextField(blank=True, null=True)
+    certificate = models.CharField(max_length=255, blank=True, null=True)
+
+    last_regular_inspection_date = models.DateField(blank=True, null=True)
+    next_due_date_regular_inspection = models.DateField(blank=True, null=True)
+
+    last_minor_service_date = models.DateField(blank=True, null=True)
+    next_due_date_minor_service = models.DateField(blank=True, null=True)
+
+    last_major_service_date = models.DateField(blank=True, null=True)
+    next_due_date_major_service = models.DateField(blank=True, null=True)
+
+    last_regular_inspection_km = models.FloatField(blank=True, null=True)
+    last_regular_inspection_hours = models.FloatField(blank=True, null=True)
+    last_regular_inspection_jobs = models.FloatField(blank=True, null=True)
+
+    last_minor_service_km = models.FloatField(blank=True, null=True)
+    last_minor_service_hours = models.FloatField(blank=True, null=True)
+    last_minor_service_jobs = models.FloatField(blank=True, null=True)
+
+    last_major_service_km = models.FloatField(blank=True, null=True)
+    last_major_service_hours = models.FloatField(blank=True, null=True)
+    last_major_service_jobs = models.FloatField(blank=True, null=True)
+
+    next_regular_inspection_km = models.FloatField(blank=True, null=True)
+    next_regular_inspection_jobs = models.FloatField(blank=True, null=True)
+    next_regular_inspection_hour = models.FloatField(blank=True, null=True)
+
+    next_minor_service_km = models.FloatField(blank=True, null=True)
+    next_minor_service_jobs = models.FloatField(blank=True, null=True)
+    next_minor_service_hours = models.FloatField(blank=True, null=True)
+
+    next_major_service_jobs = models.FloatField(blank=True, null=True)
+    next_major_service_km = models.FloatField(blank=True, null=True)
+    next_major_service_hours = models.FloatField(blank=True, null=True)
+
+    third_party_comment = models.TextField(blank=True, null=True)
+    third_party_service_date = models.DateField(blank=True, null=True)
+
+    attachments1 = models.TextField(blank=True, null=True)
+
+    breakdown_maintenance_comment = models.TextField(blank=True, null=True)
+    next_third_party_service_date = models.DateField(blank=True, null=True)
+
+    maintenance_type = models.CharField(max_length=150, blank=True, null=True)
+    ncr_no = models.CharField(max_length=150, blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.asset_code
+
+
+class EmployeeMaster(models.Model):
+    # Core
+    emp_number = models.CharField(max_length=50, unique=True)  # Emp #
+    name = models.CharField(max_length=255)
+    short_name = models.CharField(max_length=255, blank=True, null=True)
+    designation = models.CharField(max_length=255, blank=True, null=True)
+    nationality = models.CharField(max_length=100, blank=True, null=True)
+    date_of_joining = models.DateField(blank=True, null=True)
+    grade = models.CharField(max_length=50, blank=True, null=True)
+
+    # IDs & expiry
+    civil_id_number = models.CharField(max_length=100, blank=True, null=True)
+    civil_id_expiry_date = models.DateField(blank=True, null=True)
+
+    passport_number = models.CharField(max_length=100, blank=True, null=True)
+    passport_expiry_date = models.DateField(blank=True, null=True)
+
+    visa_number = models.CharField(max_length=100, blank=True, null=True)
+    visa_issue_date = models.DateField(blank=True, null=True)
+    visa_expiry_date = models.DateField(blank=True, null=True)
+
+    # Personal
+    date_of_birth = models.DateField(blank=True, null=True)
+    age = models.PositiveIntegerField(blank=True, null=True)  # can be auto-calculated
+    blood_group = models.CharField(max_length=20, blank=True, null=True)
+
+    # License
+    driving_license = models.CharField(max_length=100, blank=True, null=True)
+    dl_expiry_date = models.DateField(blank=True, null=True)
+
+    # Contact
+    tel_number = models.CharField(max_length=50, blank=True, null=True)  # Tel #
+    email_id = models.EmailField(blank=True, null=True, validators=[EmailValidator()])
+    address = models.TextField(blank=True, null=True)
+
+    # Bank
+    registered_bank_details = models.CharField(max_length=255, blank=True, null=True)
+    acc_number = models.CharField(max_length=100, blank=True, null=True)
+
+    # Employment
+    employee_type = models.CharField(max_length=100, blank=True, null=True)
+    contract_type = models.CharField(max_length=100, blank=True, null=True)
+    department = models.CharField(max_length=100, blank=True, null=True)
+    leave_schedule = models.CharField(max_length=100, blank=True, null=True)
+    last_appraisal = models.DateField(blank=True, null=True)
+    benefits = models.TextField(blank=True, null=True)
+
+    # Education
+    graduation = models.CharField(max_length=255, blank=True, null=True)
+    specialization = models.CharField(max_length=255, blank=True, null=True)
+    year_of_passing = models.PositiveIntegerField(blank=True, null=True)
+    university = models.CharField(max_length=255, blank=True, null=True)
+
+    # Family
+    GENDER_CHOICES = (("Male", "Male"), ("Female", "Female"), ("Other", "Other"))
+    gender = models.CharField(max_length=20, choices=GENDER_CHOICES, blank=True, null=True)
+
+    MARITAL_CHOICES = (("Single", "Single"), ("Married", "Married"), ("Divorced", "Divorced"), ("Widowed", "Widowed"))
+    marital_status = models.CharField(max_length=20, choices=MARITAL_CHOICES, blank=True, null=True)
+
+    name_of_spouse = models.CharField(max_length=255, blank=True, null=True)
+    number_of_kids = models.PositiveIntegerField(blank=True, null=True)
+    name_kid_1 = models.CharField(max_length=255, blank=True, null=True)
+    name_kid_2 = models.CharField(max_length=255, blank=True, null=True)
+
+    # Emergency
+    emergency_contact_name = models.CharField(max_length=255, blank=True, null=True)
+    emergency_contact_relationship = models.CharField(max_length=100, blank=True, null=True)
+    emergency_contact_tel = models.CharField(max_length=50, blank=True, null=True)
+
+    # Place of Birth
+    place_of_birth = models.CharField(max_length=255, blank=True, null=True)
+
+    # Meta
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def _calc_age(self):
+        if not self.date_of_birth:
+            return None
+        today = date.today()
+        years = today.year - self.date_of_birth.year
+        if (today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day):
+            years -= 1
+        return max(years, 0)
+
+    def save(self, *args, **kwargs):
+        # auto-calc age if DOB present
+        if self.date_of_birth:
+            self.age = self._calc_age()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.emp_number} - {self.name}"
+
         
+class AssignedService(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("assigned", "Assigned"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    ]
+    schedule = models.OneToOneField(
+        "Schedule",
+        on_delete=models.PROTECT,          # schedule must exist first, cannot delete schedule if assigned exists
+        related_name="assigned_service"
+    )
+
+    employees = models.ManyToManyField(
+        "EmployeeMaster",
+        related_name="assigned_services",
+        blank=False,
+    )
+
+    assets = models.ManyToManyField(
+        "Asset",
+        related_name="assigned_services",
+        blank=False,
+      
+    )
+
+    cost_centers = models.JSONField(default=list, blank=True)
+
+    # ✅ NEW
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="assigned")
+    equipment_required_at = models.DateTimeField(null=True, blank=True)
+    crew_required_at = models.DateTimeField(null=True, blank=True)
+
+    note = models.TextField(blank=True, null=True)
+    assigned_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"AssignedService #{self.pk} [{self.status}] -> {self.employee}"
+
+
+
+
+
+
 class Job(models.Model):
     sro = models.ForeignKey(SRO, on_delete=models.CASCADE, related_name="jobs")
     job_number = models.CharField(max_length=50, unique=True)

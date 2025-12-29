@@ -1,13 +1,21 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSros } from "../../api/sros";
-import { useCreateSchedule } from "../../api/schedules";
+import {
+  useCreateSchedule,
+  useEquipmentTypes,
+  useResources,
+} from "../../api/schedules";
 
 export function ScheduleServicePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { data: sros } = useSros();
   const createMutation = useCreateSchedule();
+
+  // ✅ dropdown data (FK tables)
+  const { data: equipmentTypes = [] } = useEquipmentTypes();
+  const { data: resources = [] } = useResources();
 
   // SRO coming from URL, e.g. /schedules/new?sro=5
   const initialSroIdFromUrl = searchParams.get("sro") ?? "";
@@ -20,31 +28,34 @@ export function ScheduleServicePage() {
   const [pressureRisk, setPressureRisk] = useState<"yes" | "no" | "">("");
   const [hseRisk, setHseRisk] = useState<"yes" | "no" | "">("");
   const [difficultyScore, setDifficultyScore] = useState<string>("");
-  const [equipment, setEquipment] = useState("");
-  const [resource, setResource] = useState("");
-  const [status, setStatus] = useState<
-    "draft" | "planned" | "approved" | "cancelled"
-  >("draft");
 
-  // Only show SROs with a "scheduled" status
+  // ✅ FK ids (string state, convert to number on submit)
+  const [equipmentTypeId, setEquipmentTypeId] = useState<string>("");
+  const [resourceId, setResourceId] = useState<string>("");
+
+  // ✅ new field
+  const [scheduledDate, setScheduledDate] = useState<string>("");
+
+  const [status, setStatus] = useState<"draft" | "planned" | "approved" | "cancelled">(
+    "draft"
+  );
+
+  // Only show SROs with status = approved
   const selectableSros = useMemo(() => {
     const list = (sros as any[] | undefined) ?? [];
     return list.filter((sro) => String(sro.status).toLowerCase() === "approved");
   }, [sros]);
 
-  // If URL had sro param but that SRO is not "scheduled", clear it
-  // If URL had sro param but that SRO is not "approved", clear it
-useEffect(() => {
-  if (!initialSroIdFromUrl) return;
-  const exists = selectableSros.some(
-    (sro) => String(sro.id) === initialSroIdFromUrl
-  );
-  if (!exists) setSroId("");
-}, [initialSroIdFromUrl, selectableSros]);
-
+  // If URL had sro param but that SRO is not approved, clear it
+  useEffect(() => {
+    if (!initialSroIdFromUrl) return;
+    const exists = selectableSros.some((sro) => String(sro.id) === initialSroIdFromUrl);
+    if (!exists) setSroId("");
+  }, [initialSroIdFromUrl, selectableSros]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+
     if (!sroId) {
       alert("Please select an SRO");
       return;
@@ -53,22 +64,28 @@ useEffect(() => {
     createMutation.mutate(
       {
         sro: Number(sroId),
+
         finance_priority: financePriority ? Number(financePriority) : null,
-        operations_priority: operationsPriority
-          ? Number(operationsPriority)
-          : null,
+        operations_priority: operationsPriority ? Number(operationsPriority) : null,
         qa_priority: qaPriority ? Number(qaPriority) : null,
+
         high_temp: highTemp === "" ? null : highTemp === "yes",
         pressure_risk: pressureRisk === "" ? null : pressureRisk === "yes",
         hse_risk: hseRisk === "" ? null : hseRisk === "yes",
+
         difficulty_score: difficultyScore ? Number(difficultyScore) : null,
-        type_of_equipment: equipment,
-        resource,
+
+        // ✅ FK values must be number or null (NEVER "")
+        type_of_equipment: equipmentTypeId ? Number(equipmentTypeId) : null,
+        resource: resourceId ? Number(resourceId) : null,
+
+        // ✅ new date field (send null if empty)
+        scheduled_date: scheduledDate || null,
+
         status,
       },
       {
         onSuccess: (created) => {
-          // After create, go to Schedule detail (where auto schedule_number is visible)
           navigate(`/schedules/${created.id}`);
         },
       }
@@ -91,7 +108,7 @@ useEffect(() => {
           space-y-4
         "
       >
-        {/* SRO selection – only 'scheduled' SROs */}
+        {/* SRO selection */}
         <div>
           <label className="block mb-1 text-[11px] font-medium text-slate-600 dark:text-slate-300">
             SRO
@@ -99,7 +116,7 @@ useEffect(() => {
           <select
             value={sroId}
             onChange={(e) => setSroId(e.target.value)}
-            disabled={!!initialSroIdFromUrl} // 🔒 lock SRO if coming from /schedules/new?sro=...
+            disabled={!!initialSroIdFromUrl}
             className="
               w-full rounded-xl border border-slate-300 bg-white px-3 py-2
               text-xs text-slate-900
@@ -115,6 +132,19 @@ useEffect(() => {
           </select>
         </div>
 
+        {/* ✅ scheduled date */}
+        <div>
+          <label className="block mb-1 text-[11px] text-slate-500 dark:text-slate-400">
+            Scheduled date
+          </label>
+          <input
+            type="date"
+            value={scheduledDate}
+            onChange={(e) => setScheduledDate(e.target.value)}
+            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100"
+          />
+        </div>
+
         {/* Priority section */}
         <div className="grid gap-3 md:grid-cols-4">
           <div>
@@ -122,6 +152,7 @@ useEffect(() => {
               Priority (1–5)
             </div>
           </div>
+
           <div>
             <label className="block mb-1 text-[11px] text-slate-500 dark:text-slate-400">
               Finance
@@ -139,6 +170,7 @@ useEffect(() => {
               ))}
             </select>
           </div>
+
           <div>
             <label className="block mb-1 text-[11px] text-slate-500 dark:text-slate-400">
               Operations
@@ -156,6 +188,7 @@ useEffect(() => {
               ))}
             </select>
           </div>
+
           <div>
             <label className="block mb-1 text-[11px] text-slate-500 dark:text-slate-400">
               Q/A
@@ -182,6 +215,7 @@ useEffect(() => {
               Complexity
             </div>
           </div>
+
           <div>
             <label className="block mb-1 text-[11px] text-slate-500 dark:text-slate-400">
               High Temp
@@ -196,6 +230,7 @@ useEffect(() => {
               <option value="no">No</option>
             </select>
           </div>
+
           <div>
             <label className="block mb-1 text-[11px] text-slate-500 dark:text-slate-400">
               Pressure Risk
@@ -210,6 +245,7 @@ useEffect(() => {
               <option value="no">No</option>
             </select>
           </div>
+
           <div>
             <label className="block mb-1 text-[11px] text-slate-500 dark:text-slate-400">
               HSE Risk
@@ -245,6 +281,7 @@ useEffect(() => {
               ))}
             </select>
           </div>
+
           <div>
             <label className="block mb-1 text-[11px] text-slate-500 dark:text-slate-400">
               Status
@@ -252,9 +289,7 @@ useEffect(() => {
             <select
               value={status}
               onChange={(e) =>
-                setStatus(
-                  e.target.value as "draft" | "planned" | "approved" | "cancelled"
-                )
+                setStatus(e.target.value as "draft" | "planned" | "approved" | "cancelled")
               }
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100"
             >
@@ -266,29 +301,42 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* Equipment & Resource */}
+        {/* ✅ EquipmentType & Resource (FK dropdowns) */}
         <div className="grid gap-3 md:grid-cols-2">
           <div>
             <label className="block mb-1 text-[11px] text-slate-500 dark:text-slate-400">
               Type of equipment
             </label>
-            <input
-              type="text"
-              value={equipment}
-              onChange={(e) => setEquipment(e.target.value)}
+            <select
+              value={equipmentTypeId}
+              onChange={(e) => setEquipmentTypeId(e.target.value)}
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100"
-            />
+            >
+              <option value="">—</option>
+              {equipmentTypes.map((et: any) => (
+                <option key={et.id} value={et.id}>
+                  {et.equipment_name}
+                </option>
+              ))}
+            </select>
           </div>
+
           <div>
             <label className="block mb-1 text-[11px] text-slate-500 dark:text-slate-400">
               Resource
             </label>
-            <input
-              type="text"
-              value={resource}
-              onChange={(e) => setResource(e.target.value)}
+            <select
+              value={resourceId}
+              onChange={(e) => setResourceId(e.target.value)}
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100"
-            />
+            >
+              <option value="">—</option>
+              {resources.map((r: any) => (
+                <option key={r.id} value={r.id}>
+                  {r.resource_name ?? r.resouce_name ?? r.name ?? `Resource ${r.id}`}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

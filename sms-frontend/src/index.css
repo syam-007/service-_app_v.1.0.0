@@ -3,3 +3,45 @@
 @tailwind utilities;
 
 
+@keyframes shimmer {
+    0% {
+      transform: translateX(-60%);
+    }
+    100% {
+      transform: translateX(60%);
+    }
+  }
+  
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background: rgba(148, 163, 184, 0.18); /* slate-400-ish */
+  }
+  
+  .dark .skeleton {
+    background: rgba(148, 163, 184, 0.10);
+  }
+  
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-60%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.45),
+      transparent
+    );
+    animation: shimmer 1.2s ease-in-out infinite;
+  }
+  
+  .dark .skeleton::after {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.18),
+      transparent
+    );
+  }

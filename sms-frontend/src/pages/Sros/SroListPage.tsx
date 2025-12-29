@@ -407,8 +407,10 @@ export function SroListPage() {
       {viewMode === "table" ? (
         <div className="rounded-2xl border border-slate-200 bg-white text-xs shadow-sm dark:border-slate-800 dark:bg-slate-950/60 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-[900px] w-full divide-y divide-slate-200 dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-800/60">
+           <div className="max-h-[70vh] overflow-y-auto"
+           >
+           <table className="min-w-[900px] w-full divide-y divide-slate-200 dark:divide-slate-800">
+           <thead className="bg-slate-50 dark:bg-slate-800/60 sticky top-0 z-10">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium text-slate-500">SRO #</th>
                   <th className="px-4 py-2 text-left font-medium text-slate-500">Customer</th>
@@ -488,6 +490,7 @@ export function SroListPage() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
 
           <div className="px-4 py-2 text-[11px] text-slate-500 dark:text-slate-400 sm:hidden">
@@ -495,6 +498,7 @@ export function SroListPage() {
           </div>
         </div>
       ) : viewMode === "card" ? (
+        <div className="max-h-[70vh] overflow-y-auto">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {rows.map((sro) => (
             <div
@@ -589,6 +593,7 @@ export function SroListPage() {
               No SROs match your filters.
             </div>
           )}
+        </div>
         </div>
       ) : (
         <div

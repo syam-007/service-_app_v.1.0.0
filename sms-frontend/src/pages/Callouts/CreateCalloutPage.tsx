@@ -1,57 +1,180 @@
 // src/pages/Callouts/CreateCalloutPage.tsx
-import { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCreateCallout } from "../../api/callout";
-import { 
-  
+import {
   useGetCustomers,
+  useGetRigs,
+  useCreateRig,
   useGetWells,
-  useGetHoleSections 
+  useGetHoleSections,
+  useCreateWell,
+  useGetFields,
 } from "../../api/dropdowns";
 import { CheckCircle2, Clock } from "lucide-react";
 
 type ServiceCategory = "wireline_gyro" | "memory_gyro" | "";
+type PipeSelectionType = "" | "casing" | "drillpipe";
 
 function toNumberOrNull(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined) return null;
+  if (typeof value === "number") return Number.isNaN(value) ? null : value;
 
-  // If it's already a number, just validate it
-  if (typeof value === "number") {
-    return Number.isNaN(value) ? null : value;
-  }
-
-  // Fallback for strings
   if (!value.trim()) return null;
   const n = Number(value);
   return Number.isNaN(n) ? null : n;
 }
 
-  // --- Create Well modal state ---
+// ✅ Pipe dropdown options
+const CASING_OPTIONS = [
+  { label: `13 3/8"`, value: "13.375" },
+  { label: `9 5/8"`, value: "9.625" },
+  { label: `7"`, value: "7.0" },
+];
 
+const DRILLPIPE_OPTIONS = [
+  { label: `4 1/2"`, value: "4.5" },
+  { label: `5"`, value: "5.0" },
+];
+
+const MIN_ID_OPTIONS = [{ label: `2"`, value: "2.0" }];
+
+// ✅ NEW: Well profile dropdown options (NO relationship with max inclination)
+const WELL_PROFILE_OPTIONS = [
+  { label: "Vertical", value: "vertical" },
+  { label: "S-shape", value: "S-shape" },
+  { label: "J-shape", value: "J-shape" },
+  { label: "Horizontal", value: "horizontal" },
+];
 
 export function CreateCalloutPage() {
   const navigate = useNavigate();
   const createCallout = useCreateCallout();
-  
+
   // Fetch dropdown data
   const { data: customers = [] } = useGetCustomers();
-  const { data: wells = [] } = useGetWells();
+  const { data: fields = [] } = useGetFields();
+
+  const { data: rigs = [], refetch: refetchRigs } = useGetRigs();
+  const { mutate: createRig, isPending: isCreatingRig } = useCreateRig();
+
+  const { data: wells = [], refetch: refetchWells } = useGetWells();
   const { data: holeSections = [] } = useGetHoleSections();
+  const { mutate: createWell, isPending: isCreatingWell } = useCreateWell();
 
+  // -----------------------------
+  // Create Rig modal state
+  // -----------------------------
+  const [isRigModalOpen, setIsRigModalOpen] = useState(false);
+  const [newRig, setNewRig] = useState({
+    name: "",
+    rig_number: "",
+  });
 
-  // --- core references ---
+  const handleNewRigChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setNewRig((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleCreateRigSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRig.name && !newRig.rig_number) return;
+
+    createRig(
+      {
+        ...newRig,
+      } as any,
+      {
+        onSuccess: (created: any) => {
+          refetchRigs();
+          setRigId(String(created.id));
+          setIsRigModalOpen(false);
+          setNewRig({ name: "", rig_number: "" });
+        },
+      }
+    );
+  };
+
+  // -----------------------------
+  // Create Well modal state
+  // -----------------------------
+  const [isWellModalOpen, setIsWellModalOpen] = useState(false);
+  const [newWell, setNewWell] = useState({
+    name: "",
+    well_id: "",
+    well_center_lat_deg: "",
+    well_center_lat_min: "",
+    well_center_lat_sec: "",
+    well_center_lng_deg: "",
+    well_center_lng_min: "",
+    well_center_lng_sec: "",
+    utm_northing: "",
+    utm_easting: "",
+    ground_elevation_m: "",
+  });
+
+  const handleNewWellChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setNewWell((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleCreateWellSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWell.name || !newWell.well_id) return;
+
+    createWell(
+      {
+        name: newWell.name,
+        well_id: newWell.well_id,
+        well_center_lat_deg: toNumberOrNull(newWell.well_center_lat_deg),
+        well_center_lat_min: toNumberOrNull(newWell.well_center_lat_min),
+        well_center_lat_sec: toNumberOrNull(newWell.well_center_lat_sec),
+        well_center_lng_deg: toNumberOrNull(newWell.well_center_lng_deg),
+        well_center_lng_min: toNumberOrNull(newWell.well_center_lng_min),
+        well_center_lng_sec: toNumberOrNull(newWell.well_center_lng_sec),
+        utm_northing: newWell.utm_northing,
+        utm_easting: newWell.utm_easting,
+        ground_elevation_m: toNumberOrNull(newWell.ground_elevation_m),
+      } as any,
+      {
+        onSuccess: (created: any) => {
+          refetchWells();
+          setWellId(String(created.id));
+
+          setIsWellModalOpen(false);
+          setNewWell({
+            name: "",
+            well_id: "",
+            well_center_lat_deg: "",
+            well_center_lat_min: "",
+            well_center_lat_sec: "",
+            well_center_lng_deg: "",
+            well_center_lng_min: "",
+            well_center_lng_sec: "",
+            utm_northing: "",
+            utm_easting: "",
+            ground_elevation_m: "",
+          });
+        },
+      }
+    );
+  };
+
+  // -----------------------------
+  // Form state
+  // -----------------------------
   const [customerId, setCustomerId] = useState("");
-  const [rigNumber, setRigNumber] = useState("");
-  const [fieldName, setFieldName] = useState(""); // New field
+  const [rigId, setRigId] = useState("");
+  const [fieldName, setFieldName] = useState("");
 
-  // --- 1. General information ---
+  // Well selectors
   const [wellId, setWellId] = useState("");
   const [holeSectionId, setHoleSectionId] = useState("");
-  
-  // Display fields that will be auto-populated
+
+  // Display fields auto-populated
   const [wellName, setWellName] = useState("");
   const [wellIdentifier, setWellIdentifier] = useState("");
-  
+
   // Auto-populated coordinates
   const [latDeg, setLatDeg] = useState("");
   const [latMin, setLatMin] = useState("");
@@ -62,7 +185,7 @@ export function CreateCalloutPage() {
   const [utmNorthing, setUtmNorthing] = useState("");
   const [utmEasting, setUtmEasting] = useState("");
 
-  // --- 2. Type of service required ---
+  // Type of service
   const [serviceCategory, setServiceCategory] = useState<ServiceCategory>("");
 
   // Wireline services
@@ -70,8 +193,7 @@ export function CreateCalloutPage() {
   const [wirelineOrientation, setWirelineOrientation] = useState(false);
   const [wirelineDrillpipe, setWirelineDrillpipe] = useState(false);
   const [wirelinePumpdown, setWirelinePumpdown] = useState(false);
-  const [wirelineOrientationMultishot, setWirelineOrientationMultishot] =
-    useState(false);
+  const [wirelineOrientationMultishot, setWirelineOrientationMultishot] = useState(false);
 
   // Memory services
   const [memoryCasing, setMemoryCasing] = useState(false);
@@ -81,37 +203,42 @@ export function CreateCalloutPage() {
   const [dropGyroGt20, setDropGyroGt20] = useState(false);
   const [dryHoleDropSystem, setDryHoleDropSystem] = useState(false);
 
-  // --- 3. Well information (remaining fields) ---
+  // Well information
+  // ✅ NEW: casing & drillpipe are dropdown string values now
+  const [pipeType, setPipeType] = useState<PipeSelectionType>("");
   const [casingSize, setCasingSize] = useState("");
   const [drillpipeSize, setDrillpipeSize] = useState("");
   const [minimumId, setMinimumId] = useState("");
 
   const [groundElevation, setGroundElevation] = useState("");
+  const [groundElevationRef, setGroundElevationRef] = useState("MSL");
   const [rigFloorElevation, setRigFloorElevation] = useState("");
   const [maxInclination, setMaxInclination] = useState("");
+
+  // ✅ Well profile is now a manual dropdown (no auto-calc)
   const [wellProfile, setWellProfile] = useState("");
+
   const [maxDownholeTemp, setMaxDownholeTemp] = useState("");
   const [h2sLevel, setH2sLevel] = useState("");
 
-  // --- 4. Survey information ---
+  // Survey information
   const [surveyStartDepth, setSurveyStartDepth] = useState("");
   const [surveyEndDepth, setSurveyEndDepth] = useState("");
-  const surveyInterval =
-    (Number(surveyEndDepth) || 0) - (Number(surveyStartDepth) || 0);
-  
+  const surveyInterval = (Number(surveyEndDepth) || 0) - (Number(surveyStartDepth) || 0);
+
   // Orientation & subs toggles
   const [hasWhipstockOrientation, setHasWhipstockOrientation] = useState(false);
   const [hasMotorOrientation, setHasMotorOrientation] = useState(false);
   const [hasUbhoSub, setHasUbhoSub] = useState(false);
   const [hasSideEntrySub, setHasSideEntrySub] = useState(false);
-  
+
   const [whipstockDepth, setWhipstockDepth] = useState("");
   const [motorDepth, setMotorDepth] = useState("");
-  
+
   const [ubhoSize, setUbhoSize] = useState("");
   const [ubhoConnSize, setUbhoConnSize] = useState("");
   const [ubhoDateRequired, setUbhoDateRequired] = useState("");
-  
+
   const [sideEntrySize, setSideEntrySize] = useState("");
   const [sideEntryConnSize, setSideEntryConnSize] = useState("");
   const [sideEntryDateRequired, setSideEntryDateRequired] = useState("");
@@ -121,24 +248,41 @@ export function CreateCalloutPage() {
   const [crewDate, setCrewDate] = useState("");
   const [crewTime, setCrewTime] = useState("");
 
-  // --- 5. Contact info & comments ---
+  // Contact info & comments
   const [completedBy, setCompletedBy] = useState("");
   const [designation, setDesignation] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [authorization, setAuthorization] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Effect to auto-populate well data when well is selected
+  // -----------------------------
+  // Derived UI rules (existing)
+  // -----------------------------
+  const isWireline = serviceCategory === "wireline_gyro";
+  const isMemory = serviceCategory === "memory_gyro";
+
+  const shouldHideSurveyOptionsBecauseCasing = isWireline && wirelineCasing;
+
+  const showOrientationOptions =
+    isWireline &&
+    !shouldHideSurveyOptionsBecauseCasing &&
+    (wirelineOrientation || wirelineOrientationMultishot);
+
+  const showSideEntryOptions =
+    isWireline &&
+    !shouldHideSurveyOptionsBecauseCasing &&
+    (wirelineDrillpipe || wirelinePumpdown);
+
+  // -----------------------------
+  // Auto-populate well data when well is selected
+  // -----------------------------
   useEffect(() => {
     if (wellId) {
-      const selectedWell = wells.find(w => w.id === Number(wellId));
+      const selectedWell: any = wells.find((w: any) => w.id === Number(wellId));
       if (selectedWell) {
         setWellName(selectedWell.name);
         setWellIdentifier(selectedWell.well_id);
-        // Auto-fill field name from well data
-        
-        
-        // Populate coordinates
+
         setLatDeg(selectedWell.well_center_lat_deg?.toString() || "");
         setLatMin(selectedWell.well_center_lat_min?.toString() || "");
         setLatSec(selectedWell.well_center_lat_sec?.toString() || "");
@@ -149,10 +293,8 @@ export function CreateCalloutPage() {
         setUtmEasting(selectedWell.utm_easting || "");
       }
     } else {
-      // Reset well data
       setWellName("");
       setWellIdentifier("");
-      setFieldName(""); // Clear field name when no well selected
       setLatDeg("");
       setLatMin("");
       setLatSec("");
@@ -164,25 +306,137 @@ export function CreateCalloutPage() {
     }
   }, [wellId, wells]);
 
-  const isStep1Complete = () => {
-    // Check all required fields
-    return (
-      customerId.trim() !== "" &&
-      rigNumber.trim() !== "" &&
-      fieldName.trim() !== "" &&
-      wellName.trim()  !== "" &&
-      holeSectionId.trim() !== "" 
-    );
-  };
-  
+  // -----------------------------
+  // ✅ Pipe selection logic (your requirement)
+  // -----------------------------
+
+  // 1) Pipe type change clears opposite dropdown and min id if none
+  useEffect(() => {
+    if (pipeType === "casing") {
+      setDrillpipeSize("");
+    }
+    if (pipeType === "drillpipe") {
+      setCasingSize("");
+    }
+    if (pipeType === "") {
+      setCasingSize("");
+      setDrillpipeSize("");
+      setMinimumId("");
+    }
+  }, [pipeType]);
+
+  // 2) When either casing or drillpipe size is selected -> auto min id to 2"
+  useEffect(() => {
+    if (casingSize || drillpipeSize) {
+      setMinimumId("2.0");
+    } else {
+      setMinimumId("");
+    }
+  }, [casingSize, drillpipeSize]);
+
+  // -----------------------------
+  // Existing conditional rules + auto selections
+  // -----------------------------
+
+  // 1) If user switches to MEMORY gyro → clear and hide ALL whipstock/motor/ubho/side-entry
+  useEffect(() => {
+    if (isMemory) {
+      setHasWhipstockOrientation(false);
+      setWhipstockDepth("");
+      setHasMotorOrientation(false);
+      setMotorDepth("");
+      setHasUbhoSub(false);
+      setUbhoSize("");
+      setUbhoConnSize("");
+      setUbhoDateRequired("");
+
+      setHasSideEntrySub(false);
+      setSideEntrySize("");
+      setSideEntryConnSize("");
+      setSideEntryDateRequired("");
+    }
+  }, [isMemory]);
+
+  // 2) If wireline casing gyro survey is selected → hide and clear all these options (even if others checked)
+  useEffect(() => {
+    if (shouldHideSurveyOptionsBecauseCasing) {
+      setHasWhipstockOrientation(false);
+      setWhipstockDepth("");
+      setHasMotorOrientation(false);
+      setMotorDepth("");
+      setHasUbhoSub(false);
+      setUbhoSize("");
+      setUbhoConnSize("");
+      setUbhoDateRequired("");
+
+      setHasSideEntrySub(false);
+      setSideEntrySize("");
+      setSideEntryConnSize("");
+      setSideEntryDateRequired("");
+    }
+  }, [shouldHideSurveyOptionsBecauseCasing]);
+
+  // 3) Drillpipe (wireline): automatically select side-entry sub
+  useEffect(() => {
+    if (
+      isWireline &&
+      !shouldHideSurveyOptionsBecauseCasing &&
+      (wirelineDrillpipe || wirelinePumpdown)
+    ) {
+      setHasSideEntrySub(true);
+    }
+  }, [isWireline, shouldHideSurveyOptionsBecauseCasing, wirelineDrillpipe, wirelinePumpdown]);
+
+  // 4) If side-entry options are not needed anymore (not drillpipe and not pumpdown) → clear side-entry
+  useEffect(() => {
+    if (!showSideEntryOptions) {
+      setHasSideEntrySub(false);
+      setSideEntrySize("");
+      setSideEntryConnSize("");
+      setSideEntryDateRequired("");
+    }
+  }, [showSideEntryOptions]);
+
+  // 5) If orientation/multishot is OFF → clear whipstock/motor/ubho values
+  useEffect(() => {
+    if (!showOrientationOptions) {
+      setHasWhipstockOrientation(false);
+      setWhipstockDepth("");
+      setHasMotorOrientation(false);
+      setMotorDepth("");
+      setHasUbhoSub(false);
+      setUbhoSize("");
+      setUbhoConnSize("");
+      setUbhoDateRequired("");
+    }
+  }, [showOrientationOptions]);
+
+  const isStep1Complete = () => customerId.trim() !== "" && rigId.trim() !== "" && fieldName.trim() !== "";
 
   // ----------------------------------------------------------
   // Progress / step status
   // ----------------------------------------------------------
   const steps = useMemo(() => {
-    const refsComplete = !!customerId &&  !!rigNumber && !!fieldName;
+    const refsComplete = !!customerId && !!rigId && !!fieldName;
 
-    const generalComplete = !!wellId || !!holeSectionId;
+    const wellGroupComplete =
+      !!wellId ||
+      !!holeSectionId ||
+      !!pipeType ||
+      !!casingSize ||
+      !!drillpipeSize ||
+      !!minimumId ||
+      !!groundElevation ||
+      !!groundElevationRef ||
+      !!rigFloorElevation ||
+      !!maxInclination ||
+      !!wellProfile ||
+      !!maxDownholeTemp ||
+      !!h2sLevel ||
+      !!latDeg ||
+      !!lngDeg ||
+      !!utmNorthing ||
+      !!utmEasting;
 
     const serviceComplete =
       !!serviceCategory ||
@@ -198,61 +452,38 @@ export function CreateCalloutPage() {
       dropGyroGt20 ||
       dryHoleDropSystem;
 
-    const wellInfoComplete =
-      !!casingSize ||
-      !!drillpipeSize ||
-      !!minimumId ||
-      !!groundElevation ||
-      !!rigFloorElevation ||
-      !!maxInclination ||
-      !!wellProfile ||
-      !!maxDownholeTemp ||
-      !!h2sLevel;
+    const surveyComplete = !!surveyStartDepth || !!surveyEndDepth || !!surveyInterval;
 
-    const surveyComplete =
-      !!surveyStartDepth || !!surveyEndDepth || !!surveyInterval;
-
-    const contactComplete =
-      !!completedBy || !!designation || !!contactNumber || !!authorization;
+    const contactComplete = !!completedBy || !!designation || !!contactNumber || !!authorization;
 
     return [
-      {
-        id: "refs",
-        title: "General Information",
-        detail: "Customer, Rig & Field Name",
-        complete: refsComplete,
-      },
-      {
-        id: "well",
-        title: "Well Details",
-        detail: "Well name, hole section and coordinates.",
-        complete: generalComplete,
-      },
-      {
-        id: "service",
-        title: "Type of Service",
-        detail: "Wireline / memory gyro and service options.",
-        complete: serviceComplete,
-      },
-      {
-        id: "survey",
-        title: "Survey Information",
-        detail: "Depth ranges, orientation points & subs.",
-        complete: surveyComplete,
-      },
-      {
-        id: "contact",
-        title: "Contact & Comments",
-        detail: "Callout owner, approvals and notes.",
-        complete: contactComplete,
-      },
+      { id: "refs", title: "General Information", detail: "Customer, Rig & Field Name", complete: refsComplete },
+      { id: "service", title: "Type of Service", detail: "Wireline / memory gyro and service options.", complete: serviceComplete },
+      { id: "well", title: "Well Information", detail: "Well details, coordinates and well parameters.", complete: wellGroupComplete },
+      { id: "survey", title: "Survey Information", detail: "Depth ranges, orientation points & subs.", complete: surveyComplete },
+      { id: "contact", title: "Contact & Comments", detail: "Callout owner, approvals and notes.", complete: contactComplete },
     ];
   }, [
     customerId,
-  
+    rigId,
     fieldName,
     wellId,
     holeSectionId,
+    pipeType,
+    casingSize,
+    drillpipeSize,
+    minimumId,
+    groundElevation,
+    groundElevationRef,
+    rigFloorElevation,
+    maxInclination,
+    wellProfile,
+    maxDownholeTemp,
+    h2sLevel,
+    latDeg,
+    lngDeg,
+    utmNorthing,
+    utmEasting,
     serviceCategory,
     wirelineCasing,
     wirelineOrientation,
@@ -265,15 +496,6 @@ export function CreateCalloutPage() {
     dropGyroLt20,
     dropGyroGt20,
     dryHoleDropSystem,
-    casingSize,
-    drillpipeSize,
-    minimumId,
-    groundElevation,
-    rigFloorElevation,
-    maxInclination,
-    wellProfile,
-    maxDownholeTemp,
-    h2sLevel,
     surveyStartDepth,
     surveyEndDepth,
     surveyInterval,
@@ -282,38 +504,34 @@ export function CreateCalloutPage() {
     contactNumber,
     authorization,
   ]);
-  
-
 
   const activeIndex = useMemo(() => {
     const idx = steps.findIndex((s) => !s.complete);
     return idx === -1 ? steps.length - 1 : idx;
   }, [steps]);
 
-  const overallProgress =
-    (steps.filter((s) => s.complete).length / steps.length) * 100;
+  const overallProgress = (steps.filter((s) => s.complete).length / steps.length) * 100;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!rigNumber || !customerId) return;
+    if (!rigId || !customerId) return;
 
     createCallout.mutate(
       {
-        // core - updated to match backend model
-        rig_number: Number(rigNumber), // Changed from 'rig' to 'rig_number'
+        rig_number: Number(rigId),
         customer: Number(customerId),
-        field_name: fieldName, // New field
+        field_name: fieldName,
         well: wellId ? Number(wellId) : null,
         hole_section: holeSectionId ? Number(holeSectionId) : null,
 
-        // service required
         service_category: serviceCategory || null,
+
         wireline_casing_survey: wirelineCasing,
         wireline_orientation_survey: wirelineOrientation,
         wireline_drillpipe_survey: wirelineDrillpipe,
         wireline_pumpdown_survey: wirelinePumpdown,
         wireline_orientation_multishot_survey: wirelineOrientationMultishot,
+
         memory_casing_slickline: memoryCasing,
         memory_drillpipe_slickline: memoryDrillpipe,
         memory_pumpdown_survey: memoryPumpdown,
@@ -321,7 +539,6 @@ export function CreateCalloutPage() {
         drop_gyro_gt_20: dropGyroGt20,
         dry_hole_drop_gyro_system: dryHoleDropSystem,
 
-        // well info - coordinates (keep as overrides if needed)
         well_center_lat_deg: toNumberOrNull(latDeg),
         well_center_lat_min: toNumberOrNull(latMin),
         well_center_lat_sec: toNumberOrNull(latSec),
@@ -331,34 +548,46 @@ export function CreateCalloutPage() {
 
         utm_northing: utmNorthing,
         utm_easting: utmEasting,
+
+        // ✅ NEW FIELD
+        pipe_selection_type: pipeType || null,
+
         casing_size_inch: toNumberOrNull(casingSize),
         drillpipe_size_inch: toNumberOrNull(drillpipeSize),
         minimum_id_inch: toNumberOrNull(minimumId),
+
         ground_elevation_m: toNumberOrNull(groundElevation),
+        ground_elevation_ref: groundElevationRef || null,
+
         rig_floor_elevation_m: toNumberOrNull(rigFloorElevation),
         maximum_inclination_deg: toNumberOrNull(maxInclination),
-        well_profile: wellProfile,
+
+        // ✅ Well profile dropdown value
+        well_profile: wellProfile || "",
+
         max_downhole_temp_c: toNumberOrNull(maxDownholeTemp),
         h2s_level: h2sLevel,
 
-        // survey info
         survey_start_depth_m: toNumberOrNull(surveyStartDepth),
         survey_end_depth_m: toNumberOrNull(surveyEndDepth),
         survey_interval_m: toNumberOrNull(surveyInterval),
+
         whipstock_orientation_depth_m: toNumberOrNull(whipstockDepth),
         motor_orientation_depth_m: toNumberOrNull(motorDepth),
+
         ubho_sub_size: ubhoSize,
         ubho_sub_connection_size: ubhoConnSize,
         ubho_sub_date_required: ubhoDateRequired || null,
+
         side_entry_sub_size: sideEntrySize,
         side_entry_sub_connection_size: sideEntryConnSize,
         side_entry_sub_date_required: sideEntryDateRequired || null,
+
         equipment_required_date: equipmentDate || null,
         equipment_required_time: equipmentTime || null,
         crew_required_date: crewDate || null,
         crew_required_time: crewTime || null,
 
-        // contacts & comments
         callout_completed_by: completedBy,
         completed_by_designation: designation,
         contact_number: contactNumber,
@@ -366,9 +595,7 @@ export function CreateCalloutPage() {
         notes,
       } as any,
       {
-        onSuccess: () => {
-          navigate("/callouts");
-        },
+        onSuccess: () => navigate("/callouts"),
       }
     );
   };
@@ -378,12 +605,9 @@ export function CreateCalloutPage() {
       {/* header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
-            New Callout
-          </h1>
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-50">New Callout</h1>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Capture a detailed service request for wireline or memory gyro
-            surveys.
+            Capture a detailed service request for wireline or memory gyro surveys.
           </p>
         </div>
         <button
@@ -399,38 +623,33 @@ export function CreateCalloutPage() {
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,2.7fr)_minmax(0,1.3fr)]">
         {/* FORM COLUMN */}
         <form
-        onSubmit={handleSubmit}
-        className="space-y-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-        style={{
-          maxHeight: '80vh',
-          overflowY: 'auto',
-          // Webkit scrollbar styling
-          scrollbarWidth: 'thin',
-           scrollbarColor: 'rgb(0, 0, 0) transparent',
-           
-        }}
+          onSubmit={handleSubmit}
+          className="space-y-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+          style={{
+            maxHeight: "80vh",
+            overflowY: "auto",
+            scrollbarWidth: "thin",
+            scrollbarColor: "rgb(0, 0, 0) transparent",
+          }}
         >
-          {/* General Information - Combined section */}
+          {/* -------------------- Step 1: General Information -------------------- */}
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                General Information
-              </h2>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                isStep1Complete()
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100'
-                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-              }`}>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  isStep1Complete()
+                    ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                }`}
+              >
                 Step 1
               </span>
             </div>
-            
+
             <div className="grid gap-4 md:grid-cols-2 text-xs">
               {/* Customer dropdown */}
               <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Customer *
-                </label>
+                <label className="block text-slate-600 dark:text-slate-300">Customer *</label>
                 <select
                   value={customerId}
                   onChange={(e) => setCustomerId(e.target.value)}
@@ -438,149 +657,229 @@ export function CreateCalloutPage() {
                   required
                 >
                   <option value="">Select Customer</option>
-                  {customers.map((customer) => (
+                  {customers.map((customer: any) => (
                     <option key={customer.id} value={customer.id}>
-                      {customer.name} 
+                      {customer.name}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Rig dropdown */}
+              {/* Field Name */}
               <div className="space-y-1 text-xs">
-              <label className="block text-slate-600 dark:text-slate-300">
-                Rig Number *
-              </label>
-              <input
-                value={rigNumber}
-                onChange={(e) => setRigNumber(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                placeholder="Enter rig number"
-                required
-              />
+                <label className="block text-slate-600 dark:text-slate-300">Field Name *</label>
+                <select
+                  value={fieldName}
+                  onChange={(e) => setFieldName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                  required
+                >
+                  <option value="">Select Field</option>
+                  {fields.map((f: any) => (
+                    <option key={f.id} value={f.id}>
+                      {f.field_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            </div>
-
-            
 
             <div className="grid gap-4 md:grid-cols-2 text-xs">
-              {/* Well dropdown */}
+              {/* Well dropdown + Create Well button */}
               <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Well Name
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-slate-600 dark:text-slate-300">Well Name *</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsWellModalOpen(true)}
+                    className="text-[10px] rounded-full border border-slate-300 px-2 py-0.5 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    + Create Well
+                  </button>
+                </div>
+
                 <select
                   value={wellId}
                   onChange={(e) => setWellId(e.target.value)}
                   className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
                 >
                   <option value="">Select Well</option>
-                  {wells.map((well) => (
+                  {wells.map((well: any) => (
                     <option key={well.id} value={well.id}>
                       {well.name}
                     </option>
                   ))}
                 </select>
               </div>
-              {/* <div className="space-y-1"> */}
-              {/* <div className="flex items-center justify-between">
-                <label className="block text-[11px] text-slate-500">
-                  Well Name
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsWellModalOpen(true)}
-                  className="text-[10px] rounded-full border border-slate-300 px-2 py-0.5 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  + Create Well
-                </button>
-              </div> */}
-              {/* <select
-                name="well"
-                value={form.well}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
-              >
-                <option value="">Select Well</option>
-                {wells.map((well: any) => (
-                  <option key={well.id} value={well.id}>
-                    {well.name}
-                  </option>
-                ))}
-              </select>
-            </div> */}
 
-              {/* Hole Section dropdown */}
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Hole Section
-                </label>
+              {/* Rig dropdown + create rig */}
+              <div className="space-y-1 text-xs">
+                <div className="flex items-center justify-between">
+                  <label className="block text-slate-600 dark:text-slate-300">Rig *</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsRigModalOpen(true)}
+                    className="text-[10px] rounded-full border border-slate-300 px-2 py-0.5 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    + Create Rig
+                  </button>
+                </div>
+
                 <select
-                  value={holeSectionId}
-                  onChange={(e) => setHoleSectionId(e.target.value)}
+                  value={rigId}
+                  onChange={(e) => setRigId(e.target.value)}
                   className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                  required
                 >
-                  <option value="">Select Hole Section</option>
-                  {holeSections.map((section) => (
-                    <option key={section.id} value={section.id}>
-                      {section.name}
+                  <option value="">Select Rig</option>
+                  {rigs.map((rig: any) => (
+                    <option key={rig.id} value={rig.id}>
+                      {rig.name || rig.rig_number || rig.number || `Rig #${rig.id}`}
                     </option>
                   ))}
                 </select>
               </div>
             </div>
-            {/* Auto-populated well details (read-only) */}
-            {wellId && (
+
+            {/* Read-only selected well summary */}
+            {wellId ? (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-900/40">
-                
                 <div className="grid gap-2 md:grid-cols-3">
-                  <div>
-                    <span className="text-slate-500">Well ID:</span>
-                    <span className="ml-2 font-medium">{wellIdentifier}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Coordinates:</span>
-                    <span className="ml-2 font-medium">
-                      {latDeg && latMin && latSec && `${latDeg}°${latMin}'${latSec}"`}
-                      {lngDeg && lngMin && lngSec && `, ${lngDeg}°${lngMin}'${lngSec}"`}
-                    </span>
-                  </div>
                   <div>
                     <span className="text-slate-500">Well Name:</span>
                     <span className="ml-2 font-medium">{wellName}</span>
                   </div>
+
+                  <div>
+                    <span className="text-slate-500">Well ID:</span>
+                    <span className="ml-2 font-medium">{wellIdentifier}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500">Well center latitude:</span>
+                    <span className="ml-2 font-medium">
+                      {latDeg && latMin && latSec ? `${latDeg}° ${latMin}' ${latSec}"` : "—"}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500">Well center longitude:</span>
+                    <span className="ml-2 font-medium">
+                      {lngDeg && lngMin && lngSec ? `${lngDeg}° ${lngMin}' ${lngSec}"` : "—"}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500">UTM northing:</span>
+                    <span className="ml-2 font-medium">{utmNorthing || "—"}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500">UTM easting:</span>
+                    <span className="ml-2 font-medium">{utmEasting || "—"}</span>
+                  </div>
                 </div>
               </div>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+                Select a well to view well ID, coordinates, and UTM values.
+              </div>
             )}
-            {/* Field Name input */}
-            <div className="space-y-1 text-xs">
-              <label className="block text-slate-600 dark:text-slate-300">
-                Field Name *
-              </label>
-              <input
-                value={fieldName}
-                onChange={(e) => setFieldName(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                placeholder="Enter field name"
-                required
-              />
-            </div>
 
-            
+            {/* requested fields */}
+            <div className="grid gap-4 md:grid-cols-3 text-xs mt-3">
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">Depth Reference</label>
+                <select
+                  value={groundElevationRef}
+                  onChange={(e) => setGroundElevationRef(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                >
+                  <option value="">Select reference</option>
+                  <option value="MSL">MSL (Mean Sea Level)</option>
+                  <option value="GL">GL (Ground Level)</option>
+                  <option value="KB">KB (Kelly Bushing)</option>
+                  <option value="DF">DF (Derrick Floor)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">Ground elevation (m)</label>
+                <input
+                  value={groundElevation}
+                  onChange={(e) => setGroundElevation(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">Rig floor elevation (m)</label>
+                <input
+                  value={rigFloorElevation}
+                  onChange={(e) => setRigFloorElevation(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">Max inclination (°)</label>
+                <input
+                  value={maxInclination}
+                  onChange={(e) => setMaxInclination(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                />
+              </div>
+
+              {/* ✅ UPDATED: Well profile dropdown */}
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">Well profile</label>
+                <select
+                  value={wellProfile}
+                  onChange={(e) => setWellProfile(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                >
+                  <option value="">Select well profile</option>
+                  {WELL_PROFILE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">Max downhole temp (°C)</label>
+                <input
+                  value={maxDownholeTemp}
+                  onChange={(e) => setMaxDownholeTemp(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">H₂S level</label>
+                <select
+                  value={h2sLevel}
+                  onChange={(e) => setH2sLevel(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                >
+                  <option value="">Select H₂S level</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+            </div>
           </section>
 
-          {/* 2. Type of service required */}
+          {/* -------------------- Step 2: Type of service required -------------------- */}
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                Type of Service Required
-              </h2>
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 Step 2
               </span>
             </div>
 
-            {/* category */}
             <div className="flex flex-wrap gap-3 text-xs">
               <label className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-slate-50 px-3 py-1.5 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                 <input
@@ -602,7 +901,6 @@ export function CreateCalloutPage() {
               </label>
             </div>
 
-            {/* wireline options */}
             {serviceCategory === "wireline_gyro" && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-900/40">
                 <p className="mb-2 text-[11px] font-medium text-slate-600 dark:text-slate-300">
@@ -617,6 +915,7 @@ export function CreateCalloutPage() {
                     />
                     Casing gyro survey
                   </label>
+
                   <label className="inline-flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -625,6 +924,7 @@ export function CreateCalloutPage() {
                     />
                     Orientation survey
                   </label>
+
                   <label className="inline-flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -633,6 +933,7 @@ export function CreateCalloutPage() {
                     />
                     Drillpipe survey
                   </label>
+
                   <label className="inline-flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -641,21 +942,25 @@ export function CreateCalloutPage() {
                     />
                     Pump down survey
                   </label>
+
                   <label className="inline-flex items-center gap-2 md:col-span-2">
                     <input
                       type="checkbox"
                       checked={wirelineOrientationMultishot}
-                      onChange={(e) =>
-                        setWirelineOrientationMultishot(e.target.checked)
-                      }
+                      onChange={(e) => setWirelineOrientationMultishot(e.target.checked)}
                     />
                     Orientation / multishot survey
                   </label>
                 </div>
+
+                {wirelineCasing && (
+                  <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    Casing gyro survey selected: orientation/sub options are not required.
+                  </p>
+                )}
               </div>
             )}
 
-            {/* memory options */}
             {serviceCategory === "memory_gyro" && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-900/40">
                 <p className="mb-2 text-[11px] font-medium text-slate-600 dark:text-slate-300">
@@ -706,9 +1011,7 @@ export function CreateCalloutPage() {
                     <input
                       type="checkbox"
                       checked={dryHoleDropSystem}
-                      onChange={(e) =>
-                        setDryHoleDropSystem(e.target.checked)
-                      }
+                      onChange={(e) => setDryHoleDropSystem(e.target.checked)}
                     />
                     Dry hole drop gyro system
                   </label>
@@ -717,398 +1020,101 @@ export function CreateCalloutPage() {
             )}
           </section>
 
-          {/* 3. Well information (remaining fields) */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                Additional Well Information
-              </h2>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                Step 3
-              </span>
-            </div>
-            
-            {/* Display coordinates (read-only when auto-populated) */}
-            <div className="grid gap-4 md:grid-cols-2 text-xs">
-              {/* Latitude */}
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Well center latitude
-                </label>
-                <div className="flex gap-2">
-                  {/* Deg */}
-                  <div className="relative flex-1">
+          {/* ✅ Orientation options ONLY when Wireline + Orientation/Multishot + NOT casing */}
+          {showOrientationOptions && (
+            <>
+              <div className="grid gap-4 md:grid-cols-2 text-xs">
+                <div className="space-y-1">
+                  <label className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-300">
                     <input
-                      type="number"
-                      value={latDeg}
-                      onChange={(e) => setLatDeg(e.target.value)}
-                      className={`w-full rounded-xl border border-slate-300 bg-slate-50 px-3 pr-6 py-2 text-sm text-slate-900 outline-none read-only focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50 ${wellId ? 'bg-slate-100 dark:bg-slate-900/60' : ''}`}
-                      placeholder="Deg"
-                      readOnly={!!wellId}
+                      type="checkbox"
+                      checked={hasWhipstockOrientation}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setHasWhipstockOrientation(checked);
+                        if (!checked) setWhipstockDepth("");
+                      }}
                     />
-                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
-                      °
-                    </span>
-                  </div>
-                  {/* Min */}
-                  <div className="relative flex-1">
+                    Whipstock orientation
+                  </label>
+                  {hasWhipstockOrientation && (
                     <input
-                      type="number"
-                      value={latMin}
-                      onChange={(e) => setLatMin(e.target.value)}
-                      className={`w-full rounded-xl border border-slate-300 bg-slate-50 px-3 pr-6 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50 ${wellId ? 'bg-slate-100 dark:bg-slate-900/60' : ''}`}
-                      placeholder="Min"
-                      readOnly={!!wellId}
+                      placeholder="Orient depth (m)"
+                      value={whipstockDepth}
+                      onChange={(e) => setWhipstockDepth(e.target.value)}
+                      required={hasWhipstockOrientation}
+                      className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
                     />
-                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
-                      ′
-                    </span>
-                  </div>
-                  {/* Sec */}
-                  <div className="relative flex-1">
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-300">
                     <input
-                      type="number"
-                      step="0.001"
-                      value={latSec}
-                      onChange={(e) => setLatSec(e.target.value)}
-                      className={`w-full rounded-xl border border-slate-300 bg-slate-50 px-3 pr-6 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50 ${wellId ? 'bg-slate-100 dark:bg-slate-900/60' : ''}`}
-                      placeholder="Sec"
-                      readOnly={!!wellId}
+                      type="checkbox"
+                      checked={hasMotorOrientation}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setHasMotorOrientation(checked);
+                        if (!checked) setMotorDepth("");
+                      }}
                     />
-                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
-                      ″
-                    </span>
-                  </div>
+                    Motor orientation
+                  </label>
+                  {hasMotorOrientation && (
+                    <input
+                      placeholder="Orient depth (m)"
+                      value={motorDepth}
+                      onChange={(e) => setMotorDepth(e.target.value)}
+                      required={hasMotorOrientation}
+                      className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                    />
+                  )}
                 </div>
               </div>
 
-              {/* Longitude */}
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Well center longitude
-                </label>
-                <div className="flex gap-2">
-                  {/* Deg */}
-                  <div className="relative flex-1">
-                    <input
-                      type="number"
-                      value={lngDeg}
-                      onChange={(e) => setLngDeg(e.target.value)}
-                      className={`w-full rounded-xl border border-slate-300 bg-slate-50 px-3 pr-6 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50 ${wellId ? 'bg-slate-100 dark:bg-slate-900/60' : ''}`}
-                      placeholder="Deg"
-                      readOnly={!!wellId}
-                    />
-                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
-                      °
-                    </span>
-                  </div>
-                  {/* Min */}
-                  <div className="relative flex-1">
-                    <input
-                      type="number"
-                      value={lngMin}
-                      onChange={(e) => setLngMin(e.target.value)}
-                      className={`w-full rounded-xl border border-slate-300 bg-slate-50 px-3 pr-6 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50 ${wellId ? 'bg-slate-100 dark:bg-slate-900/60' : ''}`}
-                      placeholder="Min"
-                      readOnly={!!wellId}
-                    />
-                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
-                      ′
-                    </span>
-                  </div>
-                  {/* Sec */}
-                  <div className="relative flex-1">
-                    <input
-                      type="number"
-                      step="0.001"
-                      value={lngSec}
-                      onChange={(e) => setLngSec(e.target.value)}
-                      className={`w-full rounded-xl border border-slate-300 bg-slate-50 px-3 pr-6 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50 ${wellId ? 'bg-slate-100 dark:bg-slate-900/60' : ''}`}
-                      placeholder="Sec"
-                      readOnly={!!wellId}
-                    />
-                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
-                      ″
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* UTM & sizes */}
-            <div className="grid gap-4 md:grid-cols-2 text-xs">
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  UTM northing
-                </label>
-                <input
-                  value={utmNorthing}
-                  onChange={(e) => setUtmNorthing(e.target.value)}
-                  className={`w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50 ${wellId ? 'bg-slate-100 dark:bg-slate-900/60' : ''}`}
-                  readOnly={!!wellId}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  UTM easting
-                </label>
-                <input
-                  value={utmEasting}
-                  onChange={(e) => setUtmEasting(e.target.value)}
-                  className={`w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50 ${wellId ? 'bg-slate-100 dark:bg-slate-900/60' : ''}`}
-                  readOnly={!!wellId}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3 text-xs">
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Casing size (in)
-                </label>
-                <input
-                  value={casingSize}
-                  onChange={(e) => setCasingSize(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Drillpipe size (in)
-                </label>
-                <input
-                  value={drillpipeSize}
-                  onChange={(e) => setDrillpipeSize(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Minimum ID (in)
-                </label>
-                <input
-                  value={minimumId}
-                  onChange={(e) => setMinimumId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3 text-xs">
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Ground elevation (m)
-                </label>
-                <input
-                  value={groundElevation}
-                  onChange={(e) => setGroundElevation(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Rig floor elevation (m)
-                </label>
-                <input
-                  value={rigFloorElevation}
-                  onChange={(e) => setRigFloorElevation(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Max inclination (°)
-                </label>
-                <input
-                  value={maxInclination}
-                  onChange={(e) => setMaxInclination(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3 text-xs">
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Well profile
-                </label>
-                <input
-                  value={wellProfile}
-                  onChange={(e) => setWellProfile(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Max downhole temp (°C)
-                </label>
-                <input
-                  value={maxDownholeTemp}
-                  onChange={(e) => setMaxDownholeTemp(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  H₂S level
-                </label>
-                <input
-                  value={h2sLevel}
-                  onChange={(e) => setH2sLevel(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                />
-              </div>
-            </div>
-          </section>
-
-          {/* 4. Survey information */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                Survey Information
-              </h2>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                Step 4
-              </span>
-            </div>
-
-            {/* Start / End / Interval */}
-            <div className="grid gap-4 md:grid-cols-3 text-xs">
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Start depth (m)
-                </label>
-                <input
-                  value={surveyStartDepth}
-                  onChange={(e) => setSurveyStartDepth(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  End depth (m)
-                </label>
-                <input
-                  value={surveyEndDepth}
-                  onChange={(e) => setSurveyEndDepth(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Survey interval (m)
-                </label>
-                <input
-                  value={
-                    surveyStartDepth.trim() !== "" && surveyEndDepth.trim() !== ""
-                      ? surveyInterval
-                      : ""
-                  }
-                  readOnly
-                  className="w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2 
-                            text-sm text-slate-900 outline-none focus:border-slate-900 
-                            dark:border-slate-700 dark:bg-slate-700 dark:text-slate-50"
-                />
-              </div>
-            </div>
-
-            {/* Whipstock & Motor orientation */}
-            <div className="grid gap-4 md:grid-cols-2 text-xs">
-              {/* Whipstock */}
-              <div className="space-y-1">
+              <div className="space-y-1 text-xs">
                 <label className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-300">
                   <input
                     type="checkbox"
-                    checked={hasWhipstockOrientation}
+                    checked={hasUbhoSub}
                     onChange={(e) => {
                       const checked = e.target.checked;
-                      setHasWhipstockOrientation(checked);
-                      if (!checked) setWhipstockDepth("");
+                      setHasUbhoSub(checked);
+                      if (!checked) {
+                        setUbhoSize("");
+                        setUbhoConnSize("");
+                        setUbhoDateRequired("");
+                      }
                     }}
                   />
-                  Whipstock orientation
+                  UBHO sub
                 </label>
-                {hasWhipstockOrientation && (
-                  <input
-                    placeholder="Orient depth (m)"
-                    value={whipstockDepth}
-                    onChange={(e) => setWhipstockDepth(e.target.value)}
-                    required={hasWhipstockOrientation}
-                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                  />
+
+                {hasUbhoSub && (
+                  <div className="grid gap-3 md:grid-cols-3 mt-1">
+                    <input
+                      placeholder="UBHO sub size"
+                      value={ubhoSize}
+                      onChange={(e) => setUbhoSize(e.target.value)}
+                      required={hasUbhoSub}
+                      className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                    />
+                    <input
+                      placeholder="UBHO connection size"
+                      value={ubhoConnSize}
+                      onChange={(e) => setUbhoConnSize(e.target.value)}
+                      required={hasUbhoSub}
+                      className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                    />
+                  </div>
                 )}
               </div>
+            </>
+          )}
 
-              {/* Motor */}
-              <div className="space-y-1">
-                <label className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={hasMotorOrientation}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setHasMotorOrientation(checked);
-                      if (!checked) setMotorDepth("");
-                    }}
-                  />
-                  Motor orientation
-                </label>
-                {hasMotorOrientation && (
-                  <input
-                    placeholder="Orient depth (m)"
-                    value={motorDepth}
-                    onChange={(e) => setMotorDepth(e.target.value)}
-                    required={hasMotorOrientation}
-                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* UBHO sub */}
-            <div className="space-y-1 text-xs">
-              <label className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={hasUbhoSub}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setHasUbhoSub(checked);
-                    if (!checked) {
-                      setUbhoSize("");
-                      setUbhoConnSize("");
-                    }
-                  }}
-                />
-                UBHO sub
-              </label>
-              {hasUbhoSub && (
-                <div className="grid gap-3 md:grid-cols-3 mt-1">
-                  <input
-                    placeholder="UBHO sub size"
-                    value={ubhoSize}
-                    onChange={(e) => setUbhoSize(e.target.value)}
-                    required={hasUbhoSub}
-                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                  />
-                  <input
-                    placeholder="UBHO connection size"
-                    value={ubhoConnSize}
-                    onChange={(e) => setUbhoConnSize(e.target.value)}
-                    required={hasUbhoSub}
-                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                  />
-                  <input
-                    type="date"
-                    value={ubhoDateRequired}
-                    onChange={(e) => setUbhoDateRequired(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Side-entry sub */}
+          {/* ✅ Side-entry options */}
+          {showSideEntryOptions && (
             <div className="space-y-1 text-xs">
               <label className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-300">
                 <input
@@ -1120,11 +1126,18 @@ export function CreateCalloutPage() {
                     if (!checked) {
                       setSideEntrySize("");
                       setSideEntryConnSize("");
+                      setSideEntryDateRequired("");
                     }
                   }}
                 />
                 Side-entry sub
+                {isWireline && wirelineDrillpipe && (
+                  <span className="ml-1 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    Auto-selected (Drillpipe)
+                  </span>
+                )}
               </label>
+
               {hasSideEntrySub && (
                 <div className="grid gap-3 md:grid-cols-3 mt-1">
                   <input
@@ -1141,22 +1154,183 @@ export function CreateCalloutPage() {
                     required={hasSideEntrySub}
                     className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
                   />
-                  <input
-                    type="date"
-                    value={sideEntryDateRequired}
-                    onChange={(e) => setSideEntryDateRequired(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                  />
                 </div>
               )}
             </div>
+          )}
 
+          {/* -------------------- Step 3: Well Information -------------------- */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                Step 3
+              </span>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3 text-xs">
+            <div className="space-y-1">
+              <label className="block text-slate-600 dark:text-slate-300">Hole Section</label>
+              <select
+                value={holeSectionId}
+                onChange={(e) => setHoleSectionId(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+              >
+                <option value="">Select Hole Section</option>
+
+                {[...holeSections]
+                  .sort((a: any, b: any) => {
+                    // Try numeric sort (e.g. "12 1/4", "8.5", "17.5")
+                    const numA = parseFloat(String(a.name).replace(",", "."));
+                    const numB = parseFloat(String(b.name).replace(",", "."));
+
+                    const aHasNum = Number.isFinite(numA);
+                    const bHasNum = Number.isFinite(numB);
+
+                    if (aHasNum && bHasNum) return numA - numB; // ascending numeric
+                    if (aHasNum && !bHasNum) return -1;         // numbers first
+                    if (!aHasNum && bHasNum) return 1;
+
+                    // Fallback: alphabetical ascending
+                    return String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: "base" });
+                  })
+                  .map((section: any) => (
+                    <option key={section.id} value={section.id}>
+                      {section.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+              {/* ✅ Pipe type selection (exclusive checkboxes) */}
+              <div className="space-y-1 md:col-span-2">
+                <label className="block text-slate-600 dark:text-slate-300">Select Pipe Type</label>
+                <div className="flex gap-4">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={pipeType === "casing"}
+                      onChange={(e) => setPipeType(e.target.checked ? "casing" : "")}
+                    />
+                    Casing
+                  </label>
+
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={pipeType === "drillpipe"}
+                      onChange={(e) => setPipeType(e.target.checked ? "drillpipe" : "")}
+                    />
+                    Drillpipe
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                     
+                    />
+                    tubing 
+                  </label>
+                </div>
+              </div>
+
+              {/* ✅ Casing dropdown */}
+              {pipeType === "casing" && (
+                <div className="space-y-1">
+                  <label className="block text-slate-600 dark:text-slate-300">Casing size</label>
+                  <select
+                    value={casingSize}
+                    onChange={(e) => setCasingSize(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                  >
+                    <option value="">Select casing size</option>
+                    {CASING_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* ✅ Drillpipe dropdown */}
+              {pipeType === "drillpipe" && (
+                <div className="space-y-1">
+                  <label className="block text-slate-600 dark:text-slate-300">Drillpipe size</label>
+                  <select
+                    value={drillpipeSize}
+                    onChange={(e) => setDrillpipeSize(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                  >
+                    <option value="">Select drillpipe size</option>
+                    {DRILLPIPE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* ✅ Minimum ID dropdown (auto set to 2") */}
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">Minimum ID</label>
+                <select
+                  value={minimumId}
+                  onChange={(e) => setMinimumId(e.target.value)}
+                  disabled={!!(casingSize || drillpipeSize)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                >
+                  <option value="">Select minimum ID</option>
+                  {MIN_ID_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                {(casingSize || drillpipeSize) && (
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Auto-set to 2" based on selected size.</p>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* -------------------- Step 4: Survey information -------------------- */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                Step 4
+              </span>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3 text-xs">
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">Start depth (m)</label>
+                <input
+                  value={surveyStartDepth}
+                  onChange={(e) => setSurveyStartDepth(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">End depth (m)</label>
+                <input
+                  value={surveyEndDepth}
+                  onChange={(e) => setSurveyEndDepth(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">Survey interval (m)</label>
+                <input
+                  value={surveyStartDepth.trim() !== "" && surveyEndDepth.trim() !== "" ? surveyInterval : ""}
+                  readOnly
+                  className="w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-700 dark:text-slate-50"
+                />
+              </div>
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2 text-xs">
               <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Equipment required (date / time)
-                </label>
+                <label className="block text-slate-600 dark:text-slate-300">Equipment required (date / time)</label>
                 <div className="flex gap-2">
                   <input
                     type="date"
@@ -1172,10 +1346,9 @@ export function CreateCalloutPage() {
                   />
                 </div>
               </div>
+
               <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Crew required (date / time)
-                </label>
+                <label className="block text-slate-600 dark:text-slate-300">Crew required (date / time)</label>
                 <div className="flex gap-2">
                   <input
                     type="date"
@@ -1194,51 +1367,44 @@ export function CreateCalloutPage() {
             </div>
           </section>
 
-          {/* 5. Contact info & comments */}
+          {/* -------------------- Step 5: Contact info & comments -------------------- */}
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                Contact & Comments
-              </h2>
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 Step 5
               </span>
             </div>
+
             <div className="grid gap-4 md:grid-cols-2 text-xs">
               <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Callout completed by
-                </label>
+                <label className="block text-slate-600 dark:text-slate-300">Callout completed by</label>
                 <input
                   value={completedBy}
                   onChange={(e) => setCompletedBy(e.target.value)}
                   className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
                 />
               </div>
+
               <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Designation
-                </label>
+                <label className="block text-slate-600 dark:text-slate-300">Designation</label>
                 <input
                   value={designation}
                   onChange={(e) => setDesignation(e.target.value)}
                   className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
                 />
               </div>
+
               <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Contact number
-                </label>
+                <label className="block text-slate-600 dark:text-slate-300">Contact number</label>
                 <input
                   value={contactNumber}
                   onChange={(e) => setContactNumber(e.target.value)}
                   className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
                 />
               </div>
+
               <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">
-                  Authorization
-                </label>
+                <label className="block text-slate-600 dark:text-slate-300">Authorization</label>
                 <input
                   value={authorization}
                   onChange={(e) => setAuthorization(e.target.value)}
@@ -1248,9 +1414,7 @@ export function CreateCalloutPage() {
             </div>
 
             <div className="space-y-1 text-xs">
-              <label className="block text-slate-600 dark:text-slate-300">
-                Comments / Notes
-              </label>
+              <label className="block text-slate-600 dark:text-slate-300">Comments / Notes</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -1295,9 +1459,7 @@ export function CreateCalloutPage() {
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Callout Progress
               </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                See how far you are in the callout form.
-              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">See how far you are in the callout form.</p>
             </div>
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2 py-1 text-[10px] font-medium text-slate-50 dark:bg-slate-100 dark:text-slate-900">
               <Clock size={10} />
@@ -1305,7 +1467,6 @@ export function CreateCalloutPage() {
             </span>
           </div>
 
-          {/* horizontal bar for overall progress */}
           <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
             <div
               className="h-full rounded-full bg-slate-900 transition-all dark:bg-slate-100"
@@ -1313,7 +1474,6 @@ export function CreateCalloutPage() {
             />
           </div>
 
-          {/* vertical stepper */}
           <ol className="mt-4 space-y-3 text-xs">
             {steps.map((step, idx) => {
               const isLast = idx === steps.length - 1;
@@ -1322,12 +1482,8 @@ export function CreateCalloutPage() {
 
               return (
                 <li key={step.id} className="relative pl-6">
-                  {/* vertical line */}
-                  {!isLast && (
-                    <span className="absolute left-1.5 top-3 h-full w-px bg-slate-200 dark:bg-slate-700" />
-                  )}
+                  {!isLast && <span className="absolute left-1.5 top-3 h-full w-px bg-slate-200 dark:bg-slate-700" />}
 
-                  {/* dot */}
                   <span
                     className={`absolute left-0 top-2 flex h-3 w-3 items-center justify-center rounded-full border text-[8px] ${
                       isComplete
@@ -1343,9 +1499,7 @@ export function CreateCalloutPage() {
                   <div className="flex items-center justify-between">
                     <span
                       className={`text-xs font-semibold ${
-                        isActive
-                          ? "text-slate-900 dark:text-slate-50"
-                          : "text-slate-700 dark:text-slate-200"
+                        isActive ? "text-slate-900 dark:text-slate-50" : "text-slate-700 dark:text-slate-200"
                       }`}
                     >
                       {step.title}
@@ -1354,15 +1508,211 @@ export function CreateCalloutPage() {
                       {isComplete ? "Done" : isActive ? "In progress" : "Pending"}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-300">
-                    {step.detail}
-                  </p>
+                  <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-300">{step.detail}</p>
                 </li>
               );
             })}
           </ol>
         </aside>
       </div>
+
+      {/* ✅ CREATE WELL MODAL */}
+      {isWellModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-4 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Create Well</h2>
+              <button
+                type="button"
+                onClick={() => setIsWellModalOpen(false)}
+                className="text-[11px] text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form className="space-y-3" onSubmit={handleCreateWellSubmit}>
+              <div className="space-y-1">
+                <label className="block text-[11px] text-slate-500">
+                  Well Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  name="name"
+                  value={newWell.name}
+                  onChange={handleNewWellChange}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[11px] text-slate-500">
+                  Well ID <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  name="well_id"
+                  value={newWell.well_id}
+                  onChange={handleNewWellChange}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                  required
+                />
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="block text-[11px] text-slate-500">Latitude (deg / min / sec)</label>
+                  <div className="flex gap-2">
+                    <input
+                      name="well_center_lat_deg"
+                      value={newWell.well_center_lat_deg}
+                      onChange={handleNewWellChange}
+                      placeholder="deg"
+                      type="number"
+                      className="w-1/3 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                    />
+                    <input
+                      name="well_center_lat_min"
+                      value={newWell.well_center_lat_min}
+                      onChange={handleNewWellChange}
+                      placeholder="min"
+                      type="number"
+                      className="w-1/3 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                    />
+                    <input
+                      name="well_center_lat_sec"
+                      value={newWell.well_center_lat_sec}
+                      onChange={handleNewWellChange}
+                      placeholder="sec"
+                      type="number"
+                      step="0.001"
+                      className="w-1/3 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[11px] text-slate-500">Longitude (deg / min / sec)</label>
+                  <div className="flex gap-2">
+                    <input
+                      name="well_center_lng_deg"
+                      value={newWell.well_center_lng_deg}
+                      onChange={handleNewWellChange}
+                      placeholder="deg"
+                      type="number"
+                      className="w-1/3 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                    />
+                    <input
+                      name="well_center_lng_min"
+                      value={newWell.well_center_lng_min}
+                      onChange={handleNewWellChange}
+                      placeholder="min"
+                      type="number"
+                      className="w-1/3 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                    />
+                    <input
+                      name="well_center_lng_sec"
+                      value={newWell.well_center_lng_sec}
+                      onChange={handleNewWellChange}
+                      placeholder="sec"
+                      type="number"
+                      step="0.001"
+                      className="w-1/3 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="block text-[11px] text-slate-500">UTM northing</label>
+                  <input
+                    name="utm_northing"
+                    value={newWell.utm_northing}
+                    onChange={handleNewWellChange}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-[11px] text-slate-500">UTM easting</label>
+                  <input
+                    name="utm_easting"
+                    value={newWell.utm_easting}
+                    onChange={handleNewWellChange}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                  />
+                </div>
+              </div>
+
+              
+
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsWellModalOpen(false)}
+                  className="text-xs rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingWell}
+                  className="text-xs rounded-full border border-emerald-500 bg-emerald-500 px-3 py-1.5 font-medium text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isCreatingWell ? "Creating…" : "Create Well"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ CREATE RIG MODAL */}
+      {isRigModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-4 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Create Rig</h2>
+              <button
+                type="button"
+                onClick={() => setIsRigModalOpen(false)}
+                className="text-[11px] text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form className="space-y-3" onSubmit={handleCreateRigSubmit}>
+              <div className="space-y-1">
+                <label className="block text-[11px] text-slate-500">Rig Number</label>
+                <input
+                  name="rig_number"
+                  value={newRig.rig_number}
+                  onChange={handleNewRigChange}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                  placeholder="e.g. 101"
+                />
+              </div>
+
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRigModalOpen(false)}
+                  className="text-xs rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingRig}
+                  className="text-xs rounded-full border border-emerald-500 bg-emerald-500 px-3 py-1.5 font-medium text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isCreatingRig ? "Creating…" : "Create Rig"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

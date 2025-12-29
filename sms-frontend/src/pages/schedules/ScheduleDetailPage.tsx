@@ -1,13 +1,33 @@
 // src/pages/Schedules/ScheduleDetailPage.tsx
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Edit3, List, ShieldAlert, Wrench, Package } from "lucide-react";
+import { ArrowLeft, Edit3, List, ShieldAlert, Wrench, Package, CalendarDays,Link2 } from "lucide-react";
 import { useSchedule } from "../../api/schedules";
+import api from "../../api/axios";
 
 export function ScheduleDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: schedule, isLoading, error } = useSchedule(id);
+  const [assignedServiceId, setAssignedServiceId] = useState<number | null>(null);
+  const [assignedLoading, setAssignedLoading] = useState(false);
+
+  useEffect(() => {
+    const run = async () => {
+      if (!id) return;
+      setAssignedLoading(true);
+      try {
+        const res = await api.get(`/assigned-services/by-schedule/${id}/`);
+        setAssignedServiceId(res.data?.id ?? null);
+      } catch {
+        setAssignedServiceId(null);
+      } finally {
+        setAssignedLoading(false);
+      }
+    };
+    run();
+  }, [id]);
+  
 
   if (isLoading) return <div className="p-4 text-sm">Loading schedule…</div>;
   if (error || !schedule) return <div className="p-4 text-sm">Failed to load schedule.</div>;
@@ -15,11 +35,14 @@ export function ScheduleDetailPage() {
   const sroId = schedule.sro;
   const statusPill = getStatusPillClass(schedule.status);
 
+  const scheduledDateLabel = schedule.scheduled_date
+    ? new Date(schedule.scheduled_date).toLocaleDateString()
+    : "—";
+
   return (
     <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 py-4 space-y-5">
       {/* HERO HEADER */}
       <div className="relative overflow-hidden rounded-3xl border border-slate-200/70 dark:border-slate-800 bg-white/70 dark:bg-slate-950/60 backdrop-blur shadow-sm">
-        {/* subtle gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 opacity-80" />
         <div className="absolute -top-20 -right-20 h-56 w-56 rounded-full bg-slate-200/40 dark:bg-slate-800/40 blur-3xl" />
         <div className="absolute -bottom-24 -left-24 h-56 w-56 rounded-full bg-slate-200/40 dark:bg-slate-800/40 blur-3xl" />
@@ -28,7 +51,6 @@ export function ScheduleDetailPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             {/* left */}
             <div className="flex items-start gap-3">
-              {/* Back to SRO */}
               <IconButton title="Back to SRO" onClick={() => sroId && navigate(`/sros/${sroId}`)}>
                 <ArrowLeft className="h-4 w-4" />
               </IconButton>
@@ -58,13 +80,25 @@ export function ScheduleDetailPage() {
                       {schedule.sro_number ?? `SRO_${schedule.sro}`}
                     </span>
                   </span>
+
                   <span className="hidden sm:inline">•</span>
-                  <span>
+
+                  <span className="inline-flex items-center gap-1">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    Scheduled:{" "}
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      {scheduledDateLabel}
+                    </span>
+                  </span>
+
+                  {/* <span className="hidden sm:inline">•</span> */}
+
+                  {/* <span>
                     Created:{" "}
                     <span className="font-medium text-slate-700 dark:text-slate-200">
                       {schedule.created_at ? new Date(schedule.created_at).toLocaleString() : "—"}
                     </span>
-                  </span>
+                  </span> */}
                 </div>
               </div>
             </div>
@@ -75,11 +109,20 @@ export function ScheduleDetailPage() {
                 <List className="h-4 w-4" />
                 Schedule List
               </PrimaryButton>
+              <GhostButton
+                onClick={() => assignedServiceId && navigate(`/assigned-services/${assignedServiceId}`)}
+                title={assignedServiceId ? "Open assigned service" : "No assigned service yet"}
+                disabled={!assignedServiceId || assignedLoading}
+              >
+                <Link2 className="h-4 w-4" />
+                {assignedLoading ? "Checking…" : assignedServiceId ? "Assigned Service" : "Not Assigned"}
+              </GhostButton>
 
-              <GhostButton onClick={() => alert("TODO: implement edit page")} title="Edit schedule">
+              <GhostButton onClick={() => navigate(`/schedules/${id}/edit`)} title="Edit schedule">
                 <Edit3 className="h-4 w-4" />
                 Edit
               </GhostButton>
+
             </div>
           </div>
         </div>
@@ -87,11 +130,9 @@ export function ScheduleDetailPage() {
 
       {/* PRIORITY */}
       <section className="space-y-3">
-        <div className="flex items-end justify-between flex-wrap gap-2">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Priority</h2>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">Scores are out of 5.</p>
-          </div>
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Priority</h2>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">Scores are out of 5.</p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -143,31 +184,23 @@ export function ScheduleDetailPage() {
           />
         </ModernCard>
 
-        <ModernCard
-          title="Equipment"
-          subtitle="Type & resource"
-          icon={<Wrench className="h-4 w-4" />}
-        >
-          <InfoRow label="Type of equipment" value={schedule.type_of_equipment || "—"} />
-          <InfoRow label="Resource" value={schedule.resource || "—"} />
+        <ModernCard title="Equipment" subtitle="Type, resource & date" icon={<Wrench className="h-4 w-4" />}>
+          {/* ✅ use serializer fields */}
+          <InfoRow label="Type of equipment" value={schedule.type_of_equipment_name ?? "—"} />
+          <InfoRow label="Resource" value={schedule.resource_name ?? "—"} />
+          <InfoRow label="Scheduled date" value={scheduledDateLabel} />
         </ModernCard>
 
         <ModernCard title="Meta" subtitle="Record details" icon={<Package className="h-4 w-4" />}>
-          <InfoRow
-            label="Status"
-            value={<span className="capitalize">{String(schedule.status || "—")}</span>}
-          />
-          <InfoRow
-            label="Created"
-            value={schedule.created_at ? new Date(schedule.created_at).toLocaleString() : "—"}
-          />
+          <InfoRow label="Status" value={<span className="capitalize">{String(schedule.status || "—")}</span>} />
+          <InfoRow label="Created" value={schedule.created_at ? new Date(schedule.created_at).toLocaleString() : "—"} />
         </ModernCard>
       </div>
     </div>
   );
 }
 
-/* ---------------- Modern UI pieces ---------------- */
+/* ---------------- UI pieces ---------------- */
 
 function IconButton({
   children,
@@ -279,9 +312,7 @@ function ModernCard({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">{title}</h3>
-              {subtitle && (
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">{subtitle}</p>
-              )}
+              {subtitle && <p className="text-[11px] text-slate-500 dark:text-slate-400">{subtitle}</p>}
             </div>
           </div>
         </div>
@@ -321,17 +352,13 @@ function MetricRingCard({
 
   return (
     <div
-      className={`
+      className="
         group relative overflow-hidden rounded-3xl p-4
         border bg-white/70 backdrop-blur
         dark:bg-slate-950/50
-        ${
-          emphasize
-            ? "border-slate-300/70 dark:border-slate-700"
-            : "border-slate-200/70 dark:border-slate-800"
-        }
+        border-slate-200/70 dark:border-slate-800
         shadow-sm hover:shadow-md transition
-      `}
+      "
     >
       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition">
         <div className="absolute inset-0 bg-gradient-to-br from-white/60 to-transparent dark:from-slate-900/40" />
@@ -339,9 +366,7 @@ function MetricRingCard({
 
       <div className="relative flex items-center justify-between">
         <div>
-          <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            {label}
-          </div>
+          <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
           <div className="mt-1 text-xs font-medium text-slate-700 dark:text-slate-200">{level}</div>
         </div>
 
@@ -459,17 +484,11 @@ function pillForScore(score: number | null) {
   return "border-emerald-200 bg-emerald-50/80 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-900/30 dark:text-emerald-200";
 }
 
-/* ---------------- NEW: Risk / Difficulty coloring ---------------- */
-
-// Yes => red, No => green, null => neutral
 function riskValueClass(isRisk: boolean | null) {
   if (isRisk === null) return "text-slate-400 dark:text-slate-500";
-  return isRisk
-    ? "text-rose-600 dark:text-rose-300"
-    : "text-emerald-600 dark:text-emerald-300";
+  return isRisk ? "text-rose-600 dark:text-rose-300" : "text-emerald-600 dark:text-emerald-300";
 }
 
-// Difficulty High (>= 4) => red, else => green, null => neutral
 function difficultyValueClass(score: number | string | null | undefined) {
   const n = normalizeScore(score);
   if (n === null) return "text-slate-400 dark:text-slate-500";

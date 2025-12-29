@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -11,6 +12,13 @@ import {
   Moon,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Settings,
+  Boxes,
+  Users,
+  Wrench,
+  Database,
+  CircleDot
 } from "lucide-react";
 
 type Theme = "light" | "dark";
@@ -39,7 +47,6 @@ function useTheme(): [Theme, () => void] {
       return next;
     });
   };
-
   return [theme, toggleTheme];
 }
 
@@ -48,6 +55,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false); // mobile drawer
   const [theme, toggleTheme] = useTheme();
   const location = useLocation();
+
+  // ✅ Configuration dropdown state
+  const [configOpen, setConfigOpen] = useState(true);
+
+  useEffect(() => {
+    // ✅ auto-expand config if you're on /config/*
+    if (location.pathname.startsWith("/config")) setConfigOpen(true);
+  }, [location.pathname]);
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
@@ -116,6 +131,89 @@ export function AppLayout({ children }: { children: ReactNode }) {
           label="Schedules"
           onClick={closeMobileSidebar}
         />
+        <SidebarLink
+          to="/assigned-services"
+          icon={Wrench}
+          collapsed={collapsed}
+          active={isActive("/assigned-services")}
+          label="Assigned Services"
+          onClick={closeMobileSidebar}
+        />
+
+        {/* ✅ Configuration dropdown (above theme toggle) */}
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setConfigOpen((v) => !v)}
+            title={collapsed ? "Configuration" : undefined}
+            className="
+              w-full flex items-center gap-3 rounded-xl px-2 py-2
+              border border-transparent
+              hover:bg-slate-100 dark:hover:bg-slate-900
+              text-black dark:text-white
+              transition
+            "
+          >
+            {/* Icon container */}
+            <span
+              className="
+                inline-flex h-6 w-6 items-center justify-center rounded-xl
+                border border-slate-200 bg-white
+                dark:border-slate-800 dark:bg-slate-950
+              "
+            >
+              <Settings className="h-4 w-4" />
+            </span>
+
+            {/* Label + chevron (hidden in collapsed mode) */}
+            {!collapsed && (
+              <>
+                <span className="flex-1 text-left text-xs font-medium truncate">Configuration</span>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${configOpen ? "rotate-180" : ""}`}
+                />
+              </>
+            )}
+          </button>
+
+          {/* Nested links (only when expanded & not collapsed) */}
+          {!collapsed && configOpen && (
+            <div className="mt-1 pl-3 space-y-1">
+              <SidebarLink
+                to="/config/assets-import"
+                icon={Boxes}
+                collapsed={false}
+                active={isActive("/config/assets-import")}
+                label="Assets"
+                onClick={closeMobileSidebar}
+              />
+              <SidebarLink
+                to="/config/employees-import"
+                icon={Users}
+                collapsed={false}
+                active={isActive("/config/employees-import")}
+                label="Employees"
+                onClick={closeMobileSidebar}
+              />
+              <SidebarLink
+                to="/config/wells"
+                icon={Database}
+                collapsed={false}
+                active={isActive("/config/wells")}
+                label="Wells"
+                onClick={closeMobileSidebar}
+              />
+              <SidebarLink
+                to="/config/rigs"
+                icon={CircleDot}
+                collapsed={false}
+                active={isActive("/config/rigs")}
+                label="Rigs"
+                onClick={closeMobileSidebar}
+              />
+            </div>
+          )}
+        </div>
       </nav>
 
       {/* Bottom section: theme toggle */}
@@ -141,7 +239,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
           >
             {theme === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
           </span>
-
           {!collapsed && (
             <span className="flex-1 text-left text-xs font-medium">
               {theme === "dark" ? "Dark mode" : "Light mode"}
@@ -155,6 +252,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-50 text-black dark:bg-slate-900 dark:text-white">
       {/* Mobile sidebar (drawer) */}
+      <Toaster position="top-right" />
       <div
         className={`fixed inset-0 z-40 flex md:hidden transition-transform duration-200 ${
           mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
@@ -255,7 +353,6 @@ function SidebarLink({ to, label, icon: Icon, collapsed, active, onClick }: Side
           }
         `}
       >
-        {/* Icons inherit currentColor => black in light, white in dark */}
         <Icon className="h-4 w-4" />
       </span>
 

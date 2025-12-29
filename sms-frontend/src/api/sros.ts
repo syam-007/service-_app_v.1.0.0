@@ -1,5 +1,5 @@
 // src/api/sro.ts
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api/axios";
 
 export function useSros() {
@@ -20,5 +20,23 @@ export function useSro(id?: string) {
       return res.data;
     },
     enabled: !!id,
+  });
+}
+
+// ✅ APPROVE SRO (POST /sros/<id>/approve/)
+async function approveSroApiCall(id: number) {
+  const res = await api.post(`/sros/${id}/approve/`);
+  return res.data;
+}
+
+export function useApproveSroToSchedule() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: number) => approveSroApiCall(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ["sros"] });
+      qc.invalidateQueries({ queryKey: ["sros", String(id)] }); 
+    },
   });
 }

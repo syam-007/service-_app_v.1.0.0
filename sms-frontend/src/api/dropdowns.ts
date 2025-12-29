@@ -85,3 +85,41 @@ export function useCreateWell() {
     },
   });
 }
+
+
+export function useCreateRig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: Record<string, any>) => {
+      const res = await api.post("rigs/", payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rigs"] });
+    },
+  });
+}
+
+// ----------------- FIELDS -----------------
+export const useGetFields = () => {
+  return useQuery({
+    queryKey: ["fields"],
+    queryFn: async () => {
+      const response = await api.get("/field/"); // or "/fields/" if you rename router
+      return response.data;
+    },
+  });
+};
+
+export function useCreateField() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await api.post("/field/", payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fields"] });
+    },
+  });
+}

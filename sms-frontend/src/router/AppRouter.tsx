@@ -11,6 +11,16 @@ import { CalloutEditPage } from "../pages/Callouts/CalloutEditPage"
 import { ScheduleListPage } from "../pages/schedules/ScheduleListPage";
 import { ScheduleDetailPage} from "../pages/schedules/ScheduleDetailPage";
 import { ScheduleServicePage } from "../pages/schedules/ScheduleServicePage"
+import { ScheduleEditPage } from "../pages/schedules/ScheduleEditPage";
+import { AssetImportPage } from "../pages/config/AssetImportPage";
+import {EmployeeImportPage} from "../pages/config/EmployeeImportPage"
+import { AssignedServiceCreatePage } from "../pages/assinged/assignedcreate";
+import { AssignedServiceListPage } from "../pages/assinged/assignedlist";
+import { AssignedServiceViewPage } from "../pages/assinged/assignedview";
+import { AssignedServiceEditPage } from "../pages/assinged/assignededit";
+import WellsPage from "../pages/config/WellsPage";
+import RigsPage from "../pages/config/Rigspage"
+
 
 
 
@@ -118,6 +128,98 @@ export function AppRouter() {
             <ScheduleDetailPage />
               </AppLayout>
            </PrivateRoute>} />
+           <Route
+            path="/schedules/:id/edit"
+            element={
+              <PrivateRoute>
+                <AppLayout>
+                  <ScheduleEditPage />
+                </AppLayout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+          path="/config/assets-import"
+          element={
+            <PrivateRoute>
+              <AppLayout>
+                <AssetImportPage />
+              </AppLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+  path="/config/employees-import"
+  element={
+    <PrivateRoute>
+      <AppLayout>
+        <EmployeeImportPage />
+      </AppLayout>
+    </PrivateRoute>
+  }
+/>
+<Route
+  path="/assigned-services"
+  element={
+    <PrivateRoute>
+      <AppLayout>
+        <AssignedServiceListPage />
+      </AppLayout>
+    </PrivateRoute>
+  }
+/>
+
+<Route
+  path="/assigned-services/new"
+  element={
+    <PrivateRoute>
+      <AppLayout>
+        <AssignedServiceCreatePage />
+      </AppLayout>
+    </PrivateRoute>
+  }
+/><Route
+  path="/assigned-services/:id"
+  element={
+    <PrivateRoute>
+      <AppLayout>
+        <AssignedServiceViewPage />
+      </AppLayout>
+    </PrivateRoute>
+  }
+/>
+
+<Route
+  path="/assigned-services/:id/edit"
+  element={
+    <PrivateRoute>
+      <AppLayout>
+        <AssignedServiceEditPage />
+      </AppLayout>
+    </PrivateRoute>
+  }
+/>
+<Route
+  path="/config/wells"
+  element={
+    <PrivateRoute>
+      <AppLayout>
+        <WellsPage />
+      </AppLayout>
+    </PrivateRoute>
+  }
+/>
+<Route
+  path="/config/rigs"
+  element={
+    <PrivateRoute>
+      <AppLayout>
+        <RigsPage />
+      </AppLayout>
+    </PrivateRoute>
+  }
+/>
+
       </Routes>
       
     </BrowserRouter>
