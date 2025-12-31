@@ -10,6 +10,10 @@ import {
   useGetHoleSections,
   useCreateWell,
   useGetFields,
+  useGetCasingSizes,
+  useGetDrillpipeSizes,
+  useGetMinimumIdSizes,
+  useGetPipeOptionsByHoleSection,
 } from "../../api/dropdowns";
 import { CheckCircle2, Clock } from "lucide-react";
 
@@ -25,21 +29,48 @@ function toNumberOrNull(value: string | number | null | undefined): number | nul
   return Number.isNaN(n) ? null : n;
 }
 
-// ✅ Pipe dropdown options
-const CASING_OPTIONS = [
-  { label: `13 3/8"`, value: "13.375" },
-  { label: `9 5/8"`, value: "9.625" },
-  { label: `7"`, value: "7.0" },
-];
+/**
+ * Parse inch sizes safely
+ * Handles:
+ *  - "9.625"
+ *  - "9 5/8"
+ *  - "12 1/4"
+ *  - "8 1/2"
+ */
+function parseInchSize(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return Number.isNaN(value) ? null : value;
 
-const DRILLPIPE_OPTIONS = [
-  { label: `4 1/2"`, value: "4.5" },
-  { label: `5"`, value: "5.0" },
-];
+  const s = String(value).trim();
+  if (!s) return null;
 
-const MIN_ID_OPTIONS = [{ label: `2"`, value: "2.0" }];
+  // direct numeric (e.g. "9.625")
+  const direct = Number(s);
+  if (!Number.isNaN(direct)) return direct;
 
-// ✅ NEW: Well profile dropdown options (NO relationship with max inclination)
+  // whole + fraction (e.g. "9 5/8", "12 1/4")
+  const wf = s.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+  if (wf) {
+    const whole = Number(wf[1]);
+    const num = Number(wf[2]);
+    const den = Number(wf[3]);
+    if (!Number.isNaN(whole) && !Number.isNaN(num) && !Number.isNaN(den) && den !== 0) {
+      return whole + num / den;
+    }
+  }
+
+  // fraction only (e.g. "5/8")
+  const fo = s.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (fo) {
+    const num = Number(fo[1]);
+    const den = Number(fo[2]);
+    if (!Number.isNaN(num) && !Number.isNaN(den) && den !== 0) return num / den;
+  }
+
+  return null;
+}
+
+// ✅ Well profile dropdown options
 const WELL_PROFILE_OPTIONS = [
   { label: "Vertical", value: "vertical" },
   { label: "S-shape", value: "S-shape" },
@@ -54,13 +85,16 @@ export function CreateCalloutPage() {
   // Fetch dropdown data
   const { data: customers = [] } = useGetCustomers();
   const { data: fields = [] } = useGetFields();
-
   const { data: rigs = [], refetch: refetchRigs } = useGetRigs();
   const { mutate: createRig, isPending: isCreatingRig } = useCreateRig();
-
   const { data: wells = [], refetch: refetchWells } = useGetWells();
   const { data: holeSections = [] } = useGetHoleSections();
   const { mutate: createWell, isPending: isCreatingWell } = useCreateWell();
+
+  // ✅ Fetch all available sizes from backend
+  const { data: allCasingSizes = [] } = useGetCasingSizes();
+  const { data: allDrillpipeSizes = [] } = useGetDrillpipeSizes();
+  const { data: allMinimumIdSizes = [] } = useGetMinimumIdSizes();
 
   // -----------------------------
   // Create Rig modal state
@@ -204,7 +238,6 @@ export function CreateCalloutPage() {
   const [dryHoleDropSystem, setDryHoleDropSystem] = useState(false);
 
   // Well information
-  // ✅ NEW: casing & drillpipe are dropdown string values now
   const [pipeType, setPipeType] = useState<PipeSelectionType>("");
   const [casingSize, setCasingSize] = useState("");
   const [drillpipeSize, setDrillpipeSize] = useState("");
@@ -215,7 +248,6 @@ export function CreateCalloutPage() {
   const [rigFloorElevation, setRigFloorElevation] = useState("");
   const [maxInclination, setMaxInclination] = useState("");
 
-  // ✅ Well profile is now a manual dropdown (no auto-calc)
   const [wellProfile, setWellProfile] = useState("");
 
   const [maxDownholeTemp, setMaxDownholeTemp] = useState("");
@@ -255,8 +287,16 @@ export function CreateCalloutPage() {
   const [authorization, setAuthorization] = useState("");
   const [notes, setNotes] = useState("");
 
+  // ✅ Dynamic options
+  const [availableCasings, setAvailableCasings] = useState<Array<{ label: string; value: string; id: number }>>([]);
+  const [availableDrillpipes, setAvailableDrillpipes] = useState<Array<{ label: string; value: string; id: number }>>([]);
+  const [availableMinimumIds, setAvailableMinimumIds] = useState<Array<{ label: string; value: string; id: number }>>([]);
+
+  // ✅ Fetch pipe options based on selected hole section
+  const { data: pipeOptions } = useGetPipeOptionsByHoleSection(holeSectionId ? Number(holeSectionId) : null);
+
   // -----------------------------
-  // Derived UI rules (existing)
+  // Derived UI rules
   // -----------------------------
   const isWireline = serviceCategory === "wireline_gyro";
   const isMemory = serviceCategory === "memory_gyro";
@@ -264,14 +304,13 @@ export function CreateCalloutPage() {
   const shouldHideSurveyOptionsBecauseCasing = isWireline && wirelineCasing;
 
   const showOrientationOptions =
-    isWireline &&
-    !shouldHideSurveyOptionsBecauseCasing &&
-    (wirelineOrientation || wirelineOrientationMultishot);
+    isWireline && !shouldHideSurveyOptionsBecauseCasing && (wirelineOrientation || wirelineOrientationMultishot);
 
   const showSideEntryOptions =
-    isWireline &&
-    !shouldHideSurveyOptionsBecauseCasing &&
-    (wirelineDrillpipe || wirelinePumpdown);
+    isWireline && !shouldHideSurveyOptionsBecauseCasing && (wirelineDrillpipe || wirelinePumpdown);
+
+  const shouldShowMinimumId =
+    (pipeType === "casing" && !!casingSize) || (pipeType === "drillpipe" && !!drillpipeSize);
 
   // -----------------------------
   // Auto-populate well data when well is selected
@@ -307,17 +346,91 @@ export function CreateCalloutPage() {
   }, [wellId, wells]);
 
   // -----------------------------
-  // ✅ Pipe selection logic (your requirement)
+  // ✅ Keep MASTER minimum IDs ALWAYS from /minimum-id-sizes/
+  // (Do NOT overwrite from pipeOptions.available_minimum_ids)
   // -----------------------------
-
-  // 1) Pipe type change clears opposite dropdown and min id if none
   useEffect(() => {
-    if (pipeType === "casing") {
-      setDrillpipeSize("");
-    }
-    if (pipeType === "drillpipe") {
+    const allMinIdOptions = allMinimumIdSizes.map((size: any) => ({
+      label: size.display_name || `${size.size}"`,
+      value: String(size.size),
+      id: size.id,
+    }));
+    setAvailableMinimumIds(allMinIdOptions);
+  }, [allMinimumIdSizes]);
+
+  // -----------------------------
+  // ✅ When hole section changes - clear pipe selections
+  // -----------------------------
+  useEffect(() => {
+    if (holeSectionId) {
+      setPipeType("");
       setCasingSize("");
+      setDrillpipeSize("");
+      setMinimumId("");
     }
+  }, [holeSectionId]);
+
+  // -----------------------------
+  // ✅ When pipeOptions arrives - update casing/drillpipe ONLY
+  // -----------------------------
+  useEffect(() => {
+    if (!pipeOptions) return;
+
+    if (pipeOptions.available_casing_sizes && pipeOptions.available_casing_sizes.length > 0) {
+      const casingOptions = pipeOptions.available_casing_sizes.map((cs: any) => ({
+        label: cs.display_name || `${cs.size}"`,
+        value: String(cs.size),
+        id: cs.id,
+      }));
+      setAvailableCasings(casingOptions);
+    } else {
+      setAvailableCasings([]);
+      if (pipeType === "casing") setPipeType("");
+    }
+
+    if (pipeOptions.available_drillpipe_sizes && pipeOptions.available_drillpipe_sizes.length > 0) {
+      const drillpipeOptions = pipeOptions.available_drillpipe_sizes.map((dp: any) => ({
+        label: dp.display_name || `${dp.size}"`,
+        value: String(dp.size),
+        id: dp.id,
+      }));
+      setAvailableDrillpipes(drillpipeOptions);
+    } else {
+      setAvailableDrillpipes([]);
+      if (pipeType === "drillpipe") setPipeType("");
+    }
+  }, [pipeOptions, pipeType]);
+
+  // -----------------------------
+  // ✅ Fallback for casing/drillpipe when NO hole section selected (or while loading)
+  // -----------------------------
+  useEffect(() => {
+    if (!holeSectionId) {
+      const allCasingOptions = allCasingSizes.map((cs: any) => ({
+        label: cs.display_name || `${cs.size}"`,
+        value: String(cs.size),
+        id: cs.id,
+      }));
+      const allDrillpipeOptions = allDrillpipeSizes.map((dp: any) => ({
+        label: dp.display_name || `${dp.size}"`,
+        value: String(dp.size),
+        id: dp.id,
+      }));
+
+      setAvailableCasings(allCasingOptions);
+      setAvailableDrillpipes(allDrillpipeOptions);
+    } else if (holeSectionId && !pipeOptions) {
+      setAvailableCasings([]);
+      setAvailableDrillpipes([]);
+    }
+  }, [holeSectionId, pipeOptions, allCasingSizes, allDrillpipeSizes]);
+
+  // -----------------------------
+  // ✅ Pipe type change clears opposite dropdown and min id if none
+  // -----------------------------
+  useEffect(() => {
+    if (pipeType === "casing") setDrillpipeSize("");
+    if (pipeType === "drillpipe") setCasingSize("");
     if (pipeType === "") {
       setCasingSize("");
       setDrillpipeSize("");
@@ -325,20 +438,52 @@ export function CreateCalloutPage() {
     }
   }, [pipeType]);
 
-  // 2) When either casing or drillpipe size is selected -> auto min id to 2"
+  // -----------------------------
+  // ✅ Selected pipe size & filtered min IDs (THIS FIXES 9 5/8 issue + shows 6 & 8.5)
+  // -----------------------------
+  const selectedPipeSize = useMemo(() => {
+    if (pipeType === "casing") return parseInchSize(casingSize);
+    if (pipeType === "drillpipe") return parseInchSize(drillpipeSize);
+    return null;
+  }, [pipeType, casingSize, drillpipeSize]);
+
+  const filteredMinimumIds = useMemo(() => {
+    if (!selectedPipeSize) return [];
+    return availableMinimumIds
+      .filter((m) => {
+        const v = parseInchSize(m.value);
+        return v !== null && v < selectedPipeSize;
+      })
+      .sort((a, b) => (parseInchSize(b.value) ?? 0) - (parseInchSize(a.value) ?? 0)); // biggest first
+  }, [availableMinimumIds, selectedPipeSize]);
+
+  // -----------------------------
+  // ✅ Auto min id to 2" if allowed, otherwise pick the first valid one
+  // -----------------------------
   useEffect(() => {
-    if (casingSize || drillpipeSize) {
-      setMinimumId("2.0");
+    if (!(casingSize || drillpipeSize)) {
+      setMinimumId("");
+      return;
+    }
+
+    // try to auto-set to 2.0 if it is valid for the selected pipe
+    const two = filteredMinimumIds.find((m) => parseInchSize(m.value) === 2);
+    if (two) {
+      setMinimumId(two.value);
+      return;
+    }
+
+    // otherwise pick the largest valid minimum id (first in sorted list)
+    if (filteredMinimumIds[0]) {
+      setMinimumId(filteredMinimumIds[0].value);
     } else {
       setMinimumId("");
     }
-  }, [casingSize, drillpipeSize]);
+  }, [casingSize, drillpipeSize, filteredMinimumIds]);
 
   // -----------------------------
   // Existing conditional rules + auto selections
   // -----------------------------
-
-  // 1) If user switches to MEMORY gyro → clear and hide ALL whipstock/motor/ubho/side-entry
   useEffect(() => {
     if (isMemory) {
       setHasWhipstockOrientation(false);
@@ -357,7 +502,6 @@ export function CreateCalloutPage() {
     }
   }, [isMemory]);
 
-  // 2) If wireline casing gyro survey is selected → hide and clear all these options (even if others checked)
   useEffect(() => {
     if (shouldHideSurveyOptionsBecauseCasing) {
       setHasWhipstockOrientation(false);
@@ -376,18 +520,12 @@ export function CreateCalloutPage() {
     }
   }, [shouldHideSurveyOptionsBecauseCasing]);
 
-  // 3) Drillpipe (wireline): automatically select side-entry sub
   useEffect(() => {
-    if (
-      isWireline &&
-      !shouldHideSurveyOptionsBecauseCasing &&
-      (wirelineDrillpipe || wirelinePumpdown)
-    ) {
+    if (isWireline && !shouldHideSurveyOptionsBecauseCasing && (wirelineDrillpipe || wirelinePumpdown)) {
       setHasSideEntrySub(true);
     }
   }, [isWireline, shouldHideSurveyOptionsBecauseCasing, wirelineDrillpipe, wirelinePumpdown]);
 
-  // 4) If side-entry options are not needed anymore (not drillpipe and not pumpdown) → clear side-entry
   useEffect(() => {
     if (!showSideEntryOptions) {
       setHasSideEntrySub(false);
@@ -397,7 +535,6 @@ export function CreateCalloutPage() {
     }
   }, [showSideEntryOptions]);
 
-  // 5) If orientation/multishot is OFF → clear whipstock/motor/ubho values
   useEffect(() => {
     if (!showOrientationOptions) {
       setHasWhipstockOrientation(false);
@@ -512,15 +649,28 @@ export function CreateCalloutPage() {
 
   const overallProgress = (steps.filter((s) => s.complete).length / steps.length) * 100;
 
+  // ✅ Helper function to find ID by size value
+  const findIdBySize = (options: Array<{ value: string; id: number }>, sizeValue: string): number | null => {
+    if (!sizeValue) return null;
+    const option = options.find((opt) => opt.value === sizeValue);
+    return option ? option.id : null;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!rigId || !customerId) return;
+
+    // Find IDs by size values
+    const casingId = findIdBySize(availableCasings, casingSize);
+    const drillpipeId = findIdBySize(availableDrillpipes, drillpipeSize);
+    const minimumIdObj = availableMinimumIds.find((minIdOpt) => minIdOpt.value === minimumId);
+    const minimumIdId = minimumIdObj ? minimumIdObj.id : null;
 
     createCallout.mutate(
       {
         rig_number: Number(rigId),
         customer: Number(customerId),
-        field_name: fieldName,
+        field_name: Number(fieldName),
         well: wellId ? Number(wellId) : null,
         hole_section: holeSectionId ? Number(holeSectionId) : null,
 
@@ -549,12 +699,12 @@ export function CreateCalloutPage() {
         utm_northing: utmNorthing,
         utm_easting: utmEasting,
 
-        // ✅ NEW FIELD
         pipe_selection_type: pipeType || null,
 
-        casing_size_inch: toNumberOrNull(casingSize),
-        drillpipe_size_inch: toNumberOrNull(drillpipeSize),
-        minimum_id_inch: toNumberOrNull(minimumId),
+        // ✅ Send IDs from backend
+        casing_size_inch: casingId,
+        drillpipe_size_inch: drillpipeId,
+        minimum_id_inch: minimumIdId,
 
         ground_elevation_m: toNumberOrNull(groundElevation),
         ground_elevation_ref: groundElevationRef || null,
@@ -562,7 +712,6 @@ export function CreateCalloutPage() {
         rig_floor_elevation_m: toNumberOrNull(rigFloorElevation),
         maximum_inclination_deg: toNumberOrNull(maxInclination),
 
-        // ✅ Well profile dropdown value
         well_profile: wellProfile || "",
 
         max_downhole_temp_c: toNumberOrNull(maxDownholeTemp),
@@ -903,16 +1052,10 @@ export function CreateCalloutPage() {
 
             {serviceCategory === "wireline_gyro" && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-900/40">
-                <p className="mb-2 text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                  Wireline gyro services
-                </p>
+                <p className="mb-2 text-[11px] font-medium text-slate-600 dark:text-slate-300">Wireline gyro services</p>
                 <div className="grid gap-2 md:grid-cols-2">
                   <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={wirelineCasing}
-                      onChange={(e) => setWirelineCasing(e.target.checked)}
-                    />
+                    <input type="checkbox" checked={wirelineCasing} onChange={(e) => setWirelineCasing(e.target.checked)} />
                     Casing gyro survey
                   </label>
 
@@ -935,11 +1078,7 @@ export function CreateCalloutPage() {
                   </label>
 
                   <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={wirelinePumpdown}
-                      onChange={(e) => setWirelinePumpdown(e.target.checked)}
-                    />
+                    <input type="checkbox" checked={wirelinePumpdown} onChange={(e) => setWirelinePumpdown(e.target.checked)} />
                     Pump down survey
                   </label>
 
@@ -963,56 +1102,30 @@ export function CreateCalloutPage() {
 
             {serviceCategory === "memory_gyro" && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-900/40">
-                <p className="mb-2 text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                  Memory gyro services
-                </p>
+                <p className="mb-2 text-[11px] font-medium text-slate-600 dark:text-slate-300">Memory gyro services</p>
                 <div className="grid gap-2 md:grid-cols-2">
                   <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={memoryCasing}
-                      onChange={(e) => setMemoryCasing(e.target.checked)}
-                    />
+                    <input type="checkbox" checked={memoryCasing} onChange={(e) => setMemoryCasing(e.target.checked)} />
                     Casing (slickline / memory)
                   </label>
                   <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={memoryDrillpipe}
-                      onChange={(e) => setMemoryDrillpipe(e.target.checked)}
-                    />
+                    <input type="checkbox" checked={memoryDrillpipe} onChange={(e) => setMemoryDrillpipe(e.target.checked)} />
                     Drillpipe (slickline / memory)
                   </label>
                   <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={memoryPumpdown}
-                      onChange={(e) => setMemoryPumpdown(e.target.checked)}
-                    />
+                    <input type="checkbox" checked={memoryPumpdown} onChange={(e) => setMemoryPumpdown(e.target.checked)} />
                     Pump down survey
                   </label>
                   <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={dropGyroLt20}
-                      onChange={(e) => setDropGyroLt20(e.target.checked)}
-                    />
+                    <input type="checkbox" checked={dropGyroLt20} onChange={(e) => setDropGyroLt20(e.target.checked)} />
                     Drop gyro &lt; 20"
                   </label>
                   <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={dropGyroGt20}
-                      onChange={(e) => setDropGyroGt20(e.target.checked)}
-                    />
+                    <input type="checkbox" checked={dropGyroGt20} onChange={(e) => setDropGyroGt20(e.target.checked)} />
                     Drop gyro &gt; 20"
                   </label>
                   <label className="inline-flex items-center gap-2 md:col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={dryHoleDropSystem}
-                      onChange={(e) => setDryHoleDropSystem(e.target.checked)}
-                    />
+                    <input type="checkbox" checked={dryHoleDropSystem} onChange={(e) => setDryHoleDropSystem(e.target.checked)} />
                     Dry hole drop gyro system
                   </label>
                 </div>
@@ -1168,38 +1281,36 @@ export function CreateCalloutPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-3 text-xs">
-            <div className="space-y-1">
-              <label className="block text-slate-600 dark:text-slate-300">Hole Section</label>
-              <select
-                value={holeSectionId}
-                onChange={(e) => setHoleSectionId(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-              >
-                <option value="">Select Hole Section</option>
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">Hole Section</label>
+                <select
+                  value={holeSectionId}
+                  onChange={(e) => setHoleSectionId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                >
+                  <option value="">Select Hole Section</option>
 
-                {[...holeSections]
-                  .sort((a: any, b: any) => {
-                    // Try numeric sort (e.g. "12 1/4", "8.5", "17.5")
-                    const numA = parseFloat(String(a.name).replace(",", "."));
-                    const numB = parseFloat(String(b.name).replace(",", "."));
+                  {[...holeSections]
+                    .sort((a: any, b: any) => {
+                      const numA = parseFloat(String(a.name).replace(",", "."));
+                      const numB = parseFloat(String(b.name).replace(",", "."));
 
-                    const aHasNum = Number.isFinite(numA);
-                    const bHasNum = Number.isFinite(numB);
+                      const aHasNum = Number.isFinite(numA);
+                      const bHasNum = Number.isFinite(numB);
 
-                    if (aHasNum && bHasNum) return numA - numB; // ascending numeric
-                    if (aHasNum && !bHasNum) return -1;         // numbers first
-                    if (!aHasNum && bHasNum) return 1;
+                      if (aHasNum && bHasNum) return numA - numB;
+                      if (aHasNum && !bHasNum) return -1;
+                      if (!aHasNum && bHasNum) return 1;
 
-                    // Fallback: alphabetical ascending
-                    return String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: "base" });
-                  })
-                  .map((section: any) => (
-                    <option key={section.id} value={section.id}>
-                      {section.name}
-                    </option>
-                  ))}
-              </select>
-            </div>
+                      return String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: "base" });
+                    })
+                    .map((section: any) => (
+                      <option key={section.id} value={section.id}>
+                        {section.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
 
               {/* ✅ Pipe type selection (exclusive checkboxes) */}
               <div className="space-y-1 md:col-span-2">
@@ -1222,12 +1333,10 @@ export function CreateCalloutPage() {
                     />
                     Drillpipe
                   </label>
+
                   <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                     
-                    />
-                    tubing 
+                    <input type="checkbox" />
+                    tubing
                   </label>
                 </div>
               </div>
@@ -1240,14 +1349,22 @@ export function CreateCalloutPage() {
                     value={casingSize}
                     onChange={(e) => setCasingSize(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                    disabled={availableCasings.length === 0}
                   >
-                    <option value="">Select casing size</option>
-                    {CASING_OPTIONS.map((o) => (
+                    <option value="">
+                      {availableCasings.length === 0 ? "No casing options for this hole section" : "Select casing size"}
+                    </option>
+                    {availableCasings.map((o) => (
                       <option key={o.value} value={o.value}>
                         {o.label}
                       </option>
                     ))}
                   </select>
+                  {holeSectionId && availableCasings.length === 0 && (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
+                      No casing options available for this hole section. Consider selecting drillpipe instead.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1259,37 +1376,52 @@ export function CreateCalloutPage() {
                     value={drillpipeSize}
                     onChange={(e) => setDrillpipeSize(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                    disabled={availableDrillpipes.length === 0}
                   >
-                    <option value="">Select drillpipe size</option>
-                    {DRILLPIPE_OPTIONS.map((o) => (
+                    <option value="">
+                      {availableDrillpipes.length === 0 ? "No drillpipe options for this hole section" : "Select drillpipe size"}
+                    </option>
+                    {availableDrillpipes.map((o) => (
                       <option key={o.value} value={o.value}>
                         {o.label}
                       </option>
                     ))}
                   </select>
+                  {holeSectionId && availableDrillpipes.length === 0 && (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
+                      No drillpipe options available for this hole section. Consider selecting casing instead.
+                    </p>
+                  )}
                 </div>
               )}
 
-              {/* ✅ Minimum ID dropdown (auto set to 2") */}
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">Minimum ID</label>
-                <select
-                  value={minimumId}
-                  onChange={(e) => setMinimumId(e.target.value)}
-                  disabled={!!(casingSize || drillpipeSize)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
-                >
-                  <option value="">Select minimum ID</option>
-                  {MIN_ID_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
+              {/* ✅ Minimum ID dropdown (FILTERED BY SELECTED PIPE SIZE) */}
+              {shouldShowMinimumId && (
+                <div className="space-y-1">
+                  <label className="block text-slate-600 dark:text-slate-300">Minimum ID</label>
+                  <select
+                    value={minimumId}
+                    onChange={(e) => setMinimumId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                    disabled={filteredMinimumIds.length === 0}
+                  >
+                    <option value="">
+                      {filteredMinimumIds.length === 0 ? "No minimum IDs available for this pipe size" : "Select minimum ID"}
                     </option>
-                  ))}
-                </select>
-                {(casingSize || drillpipeSize) && (
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Auto-set to 2" based on selected size.</p>
-                )}
-              </div>
+                    {filteredMinimumIds.map((minIdOpt) => (
+                      <option key={minIdOpt.id ?? minIdOpt.value} value={minIdOpt.value}>
+                        {minIdOpt.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  {(casingSize || drillpipeSize) && parseInchSize(minimumId) === 2 && (
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                      Auto-set (prefers 2"). You can change if needed.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 
@@ -1428,9 +1560,7 @@ export function CreateCalloutPage() {
           {/* footer */}
           <div className="flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
             {createCallout.isError && (
-              <div className="text-[11px] text-rose-600 dark:text-rose-400">
-                Failed to create callout. Please check the values.
-              </div>
+              <div className="text-[11px] text-rose-600 dark:text-rose-400">Failed to create callout. Please check the values.</div>
             )}
 
             <div className="flex gap-2 sm:ml-auto">
@@ -1456,9 +1586,7 @@ export function CreateCalloutPage() {
         <aside className="h-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/60 lg:sticky lg:top-4 lg:self-start">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Callout Progress
-              </h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Callout Progress</h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">See how far you are in the callout form.</p>
             </div>
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2 py-1 text-[10px] font-medium text-slate-50 dark:bg-slate-100 dark:text-slate-900">
@@ -1468,10 +1596,7 @@ export function CreateCalloutPage() {
           </div>
 
           <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-            <div
-              className="h-full rounded-full bg-slate-900 transition-all dark:bg-slate-100"
-              style={{ width: `${overallProgress}%` }}
-            />
+            <div className="h-full rounded-full bg-slate-900 transition-all dark:bg-slate-100" style={{ width: `${overallProgress}%` }} />
           </div>
 
           <ol className="mt-4 space-y-3 text-xs">
@@ -1497,16 +1622,10 @@ export function CreateCalloutPage() {
                   </span>
 
                   <div className="flex items-center justify-between">
-                    <span
-                      className={`text-xs font-semibold ${
-                        isActive ? "text-slate-900 dark:text-slate-50" : "text-slate-700 dark:text-slate-200"
-                      }`}
-                    >
+                    <span className={`text-xs font-semibold ${isActive ? "text-slate-900 dark:text-slate-50" : "text-slate-700 dark:text-slate-200"}`}>
                       {step.title}
                     </span>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                      {isComplete ? "Done" : isActive ? "In progress" : "Pending"}
-                    </span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">{isComplete ? "Done" : isActive ? "In progress" : "Pending"}</span>
                   </div>
                   <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-300">{step.detail}</p>
                 </li>
@@ -1642,8 +1761,6 @@ export function CreateCalloutPage() {
                   />
                 </div>
               </div>
-
-              
 
               <div className="mt-3 flex justify-end gap-2">
                 <button

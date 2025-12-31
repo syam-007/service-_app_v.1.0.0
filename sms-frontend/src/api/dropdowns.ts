@@ -16,7 +16,6 @@ export const useGetClients = () => {
 // ----------------- RIGS -----------------
 export const useGetRigs = (clientId?: number) => {
   return useQuery({
-    // include clientId in key if you ever filter by it
     queryKey: ["rigs", clientId],
     queryFn: async () => {
       const response = await api.get("/rigs/");
@@ -75,17 +74,14 @@ export function useCreateWell() {
 
   return useMutation({
     mutationFn: async (payload: any) => {
-      // ✅ use the same api instance you already use above
       const response = await api.post("/wells/", payload);
       return response.data;
     },
     onSuccess: () => {
-      // optional: auto-refetch wells anywhere in the app
       queryClient.invalidateQueries({ queryKey: ["wells"] });
     },
   });
 }
-
 
 export function useCreateRig() {
   const qc = useQueryClient();
@@ -105,7 +101,7 @@ export const useGetFields = () => {
   return useQuery({
     queryKey: ["fields"],
     queryFn: async () => {
-      const response = await api.get("/field/"); // or "/fields/" if you rename router
+      const response = await api.get("/field/");
       return response.data;
     },
   });
@@ -123,3 +119,79 @@ export function useCreateField() {
     },
   });
 }
+
+// ----------------- CASING SIZES -----------------
+export const useGetCasingSizes = () => {
+  return useQuery({
+    queryKey: ["casingSizes"],
+    queryFn: async () => {
+      const response = await api.get("/casing-sizes/");
+      return response.data;
+    },
+  });
+};
+
+// ----------------- DRILLPIPE SIZES -----------------
+export const useGetDrillpipeSizes = () => {
+  return useQuery({
+    queryKey: ["drillpipeSizes"],
+    queryFn: async () => {
+      const response = await api.get("/drillpipe-sizes/");
+      return response.data;
+    },
+  });
+};
+
+// ----------------- MINIMUM ID SIZES -----------------
+export const useGetMinimumIdSizes = () => {
+  return useQuery({
+    queryKey: ["minimumIdSizes"],
+    queryFn: async () => {
+      const response = await api.get("/minimum-id-sizes/");
+      return response.data;
+    },
+  });
+};
+
+// ----------------- HOLE SECTION RELATIONSHIPS -----------------
+export const useGetHoleSectionRelationships = () => {
+  return useQuery({
+    queryKey: ["holeSectionRelationships"],
+    queryFn: async () => {
+      const response = await api.get("/hole-section-relationships/");
+      return response.data;
+    },
+  });
+};
+
+// Get pipe options for specific hole section
+export const useGetPipeOptionsByHoleSection = (holeSectionId: number | null) => {
+  return useQuery({
+    queryKey: ["pipeOptions", holeSectionId],
+    queryFn: async () => {
+      if (!holeSectionId) return null;
+      try {
+        // ✅ Correct endpoint: /hole-sections/{id}/available-options/
+        const response = await api.get(`/hole-sections/${holeSectionId}/available-options/`);
+        return response.data;
+      } catch (error) {
+        console.warn("Could not fetch hole section specific options", error);
+        return null;
+      }
+    },
+    enabled: !!holeSectionId,
+  });
+};
+
+// Get available options for a specific callout (for edit mode)
+export const useGetCalloutOptions = (calloutId?: number | null) => {
+  return useQuery({
+    queryKey: ["calloutOptions", calloutId],
+    queryFn: async () => {
+      if (!calloutId) return null;
+      const response = await api.get(`/callouts/${calloutId}/`);
+      return response.data;
+    },
+    enabled: !!calloutId,
+  });
+};

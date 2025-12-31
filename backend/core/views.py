@@ -13,7 +13,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, filters, status
-from .models import Client, Customer, Rig, ServiceType,EquipmentType,Resource, Well, HoleSection, Callout, SRO, Job, ExecutionLogEntry,Schedule,Asset,EmployeeMaster,AssignedService,Field
+from .models import (Client, Customer, Rig, ServiceType,EquipmentType,Resource, Well,
+                     HoleSection, Callout, SRO, Job, ExecutionLogEntry,Schedule,Asset,
+                     EmployeeMaster,AssignedService,Field,CasingSize,DrillpipeSize,
+                     MinimumIdSize,HoleSectionRelationship)
 from .serializers import (
     ClientSerializer,
     CustomerSerializer,
@@ -35,6 +38,17 @@ from .serializers import (
    AssignedServiceCreateSerializer,
    AssignedServiceUpdateSerializer,
    FieldSerializer,
+   CasingSizeSerializer,
+   DrillpipeSizeSerializer,
+   MinimumIdSizeSerializer,
+   CasingSizeSerializer,
+   DrillpipeSizeSerializer,
+   MinimumIdSizeSerializer,
+   HoleSectionRelationshipSerializer
+
+
+
+
 )
 from openpyxl import load_workbook
 
@@ -313,9 +327,171 @@ class ServiceTypeViewSet(BaseViewSet):  # Added BaseViewSet inheritance
     queryset = ServiceType.objects.all()
     serializer_class = ServiceTypeSerializer
 
-class HoleSectionViewSet(BaseViewSet):  # Added BaseViewSet inheritance
+# core/views.py - Update the get_available_options method
+
+class HoleSectionViewSet(BaseViewSet):
     queryset = HoleSection.objects.all()
     serializer_class = HoleSectionSerializer
+    
+    @action(detail=True, methods=['get'], url_path='available-options')
+    def get_available_options(self, request, pk=None):
+        """Get available pipe sizes for a specific hole section"""
+        hole_section = self.get_object()
+        
+        # Parse hole section size from name (e.g., "16" from "16 inch" or "12 1/4")
+        hole_section_size = self._parse_hole_section_size(hole_section.name)
+        
+        # Initialize data
+        data = {
+            'available_casing_sizes': [],
+            'available_drillpipe_sizes': [],
+            'available_minimum_ids': [],
+        }
+        
+        if hole_section_size:
+            # Get relationships for this hole section if they exist
+            relationships = hole_section.relationships.all()
+            
+            if relationships.exists():
+                # Use defined relationships
+                relationship = relationships.first()
+                data['available_casing_sizes'] = CasingSizeSerializer(
+                    relationship.allowed_casing_sizes.all(), many=True
+                ).data
+                data['available_drillpipe_sizes'] = DrillpipeSizeSerializer(
+                    relationship.allowed_drillpipe_sizes.all(), many=True
+                ).data
+            else:
+                # If no relationships defined, filter by size comparison
+                # Get all casing sizes SMALLER than hole section
+                smaller_casing_sizes = CasingSize.objects.filter(
+                    size__lt=hole_section_size
+                ).order_by('-size')  # Order by largest first
+                
+                # Get all drillpipe sizes SMALLER than hole section
+                smaller_drillpipe_sizes = DrillpipeSize.objects.filter(
+                    size__lt=hole_section_size
+                ).order_by('-size')
+                
+                data['available_casing_sizes'] = CasingSizeSerializer(
+                    smaller_casing_sizes, many=True
+                ).data
+                data['available_drillpipe_sizes'] = DrillpipeSizeSerializer(
+                    smaller_drillpipe_sizes, many=True
+                ).data
+            
+            # Get minimum ID sizes that are smaller than the smallest available pipe
+            # First get the smallest available pipe size
+            smallest_pipe_size = None
+            if data['available_casing_sizes']:
+                casing_sizes = [cs['size'] for cs in data['available_casing_sizes']]
+                smallest_pipe_size = min(casing_sizes) if casing_sizes else None
+            
+            if data['available_drillpipe_sizes']:
+                drillpipe_sizes = [dp['size'] for dp in data['available_drillpipe_sizes']]
+                drillpipe_min = min(drillpipe_sizes) if drillpipe_sizes else None
+                if smallest_pipe_size is None or (drillpipe_min and drillpipe_min < smallest_pipe_size):
+                    smallest_pipe_size = drillpipe_min
+            
+            if smallest_pipe_size:
+                # Get minimum ID sizes smaller than the smallest pipe
+                min_id_sizes = MinimumIdSize.objects.filter(
+                    size__lt=smallest_pipe_size
+                ).order_by('-size')
+            else:
+                # If no pipe sizes available, return all minimum IDs
+                min_id_sizes = MinimumIdSize.objects.all()
+            
+            data['available_minimum_ids'] = MinimumIdSizeSerializer(
+                min_id_sizes, many=True
+            ).data
+        else:
+            # If we can't parse hole section size, return all sizes
+            data['available_casing_sizes'] = CasingSizeSerializer(
+                CasingSize.objects.all(), many=True
+            ).data
+            data['available_drillpipe_sizes'] = DrillpipeSizeSerializer(
+                DrillpipeSize.objects.all(), many=True
+            ).data
+            data['available_minimum_ids'] = MinimumIdSizeSerializer(
+                MinimumIdSize.objects.all(), many=True
+            ).data
+        
+        return Response(data)
+    
+    def _parse_hole_section_size(self, name: str):
+        """Parse numeric size from hole section name"""
+        import re
+        from decimal import Decimal
+        
+        if not name:
+            return None
+            
+        # Try to extract numbers (integers and decimals)
+        # This handles formats like: "16", "12 1/4", "8.5", "9 5/8"
+        match = re.search(r'(\d+(?:\.\d+)?)(?:\s+(\d+)/(\d+))?', str(name))
+        
+        if not match:
+            return None
+            
+        whole_part = match.group(1)
+        numerator = match.group(2)
+        denominator = match.group(3)
+        
+        try:
+            size = Decimal(whole_part)
+            
+            # Add fraction if present (e.g., "12 1/4" -> 12.25)
+            if numerator and denominator:
+                fraction = Decimal(numerator) / Decimal(denominator)
+                size += fraction
+                
+            return size
+        except:
+            return None
+
+class CasingSizeViewSet(viewsets.ModelViewSet):
+    queryset = CasingSize.objects.all()
+    serializer_class = CasingSizeSerializer
+    permission_classes = [IsAuthenticated]
+
+class DrillpipeSizeViewSet(viewsets.ModelViewSet):
+    queryset = DrillpipeSize.objects.all()
+    serializer_class = DrillpipeSizeSerializer
+    permission_classes = [IsAuthenticated]
+
+class MinimumIdSizeViewSet(viewsets.ModelViewSet):
+    queryset = MinimumIdSize.objects.all()
+    serializer_class = MinimumIdSizeSerializer
+    permission_classes = [IsAuthenticated]
+
+class HoleSectionRelationshipViewSet(viewsets.ModelViewSet):
+    queryset = HoleSectionRelationship.objects.all()
+    serializer_class = HoleSectionRelationshipSerializer
+    permission_classes = [IsAuthenticated]
+    
+    @action(detail=True, methods=['get'], url_path='available-options')
+    def get_available_options(self, request, pk=None):
+        hole_section = self.get_object()
+        
+        # Get relationships for this hole section
+        relationships = hole_section.relationships.all()
+        
+        data = {
+            'available_casing_sizes': [],
+            'available_drillpipe_sizes': [],
+        }
+        
+        if relationships.exists():
+            relationship = relationships.first()
+            data['available_casing_sizes'] = CasingSizeSerializer(
+                relationship.allowed_casing_sizes.all(), many=True
+            ).data
+            data['available_drillpipe_sizes'] = DrillpipeSizeSerializer(
+                relationship.allowed_drillpipe_sizes.all(), many=True
+            ).data
+        
+        return Response(data)
 
 class CalloutViewSet(BaseViewSet):
     queryset = Callout.objects.all()

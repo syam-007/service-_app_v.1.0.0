@@ -3,7 +3,8 @@ from decimal import Decimal
 from django.contrib.auth.models import User
 from .models import (Client,Customer, Rig, ServiceType, Callout, SRO,Schedule, Job,
                       HoleSection,Well,EquipmentType,Resource, ExecutionLogEntry,Asset,
-                      EmployeeMaster, AssignedService,Field)
+                      EmployeeMaster, AssignedService,Field,CasingSize,DrillpipeSize,MinimumIdSize,
+                      HoleSectionRelationship)
 
 from rest_framework.validators import UniqueValidator
 from django.db import transaction
@@ -72,6 +73,30 @@ class HoleSectionSerializer(serializers.ModelSerializer):
         model = HoleSection
         fields = ['id', 'name', 'description']
 
+class CasingSizeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CasingSize
+        fields = ['id', 'size', 'display_name']
+
+class DrillpipeSizeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DrillpipeSize
+        fields = ['id', 'size', 'display_name']
+
+class MinimumIdSizeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MinimumIdSize
+        fields = ['id', 'size', 'display_name']
+
+class HoleSectionRelationshipSerializer(serializers.ModelSerializer):
+    hole_section_name = serializers.CharField(source='hole_section.name', read_only=True)
+    allowed_casing_sizes = CasingSizeSerializer(many=True, read_only=True)
+    allowed_drillpipe_sizes = DrillpipeSizeSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = HoleSectionRelationship
+        fields = ['id', 'hole_section', 'hole_section_name', 'allowed_casing_sizes', 'allowed_drillpipe_sizes']
+
 
 class ServiceTypeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -93,8 +118,9 @@ class WellSerializer(serializers.ModelSerializer):
             'utm_northing', 'utm_easting'
         ]
 
+from decimal import Decimal
+
 class CalloutSerializer(serializers.ModelSerializer):
-    
     has_sro = serializers.SerializerMethodField()
     sro_number = serializers.SerializerMethodField()
     sro_id = serializers.SerializerMethodField()
@@ -106,13 +132,34 @@ class CalloutSerializer(serializers.ModelSerializer):
     created_by_username = serializers.CharField(source="created_by.username", read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
     field_name_display = serializers.CharField(source="field_name.field_name", read_only=True)
-
     
+    # NEW: Add serializer methods to get available options
+    available_casing_sizes = serializers.SerializerMethodField()
+    available_drillpipe_sizes = serializers.SerializerMethodField()
+    available_minimum_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = Callout
         fields = "__all__"
         read_only_fields = ("created_at", "created_by", "callout_sequence", "callout_number")
+
+    def get_available_casing_sizes(self, obj):
+        """Get available casing sizes based on selected hole section"""
+        if obj.hole_section and obj.hole_section.relationships.exists():
+            relationship = obj.hole_section.relationships.first()
+            return CasingSizeSerializer(relationship.allowed_casing_sizes.all(), many=True).data
+        return CasingSizeSerializer(CasingSize.objects.all(), many=True).data
+
+    def get_available_drillpipe_sizes(self, obj):
+        """Get available drillpipe sizes based on selected hole section"""
+        if obj.hole_section and obj.hole_section.relationships.exists():
+            relationship = obj.hole_section.relationships.first()
+            return DrillpipeSizeSerializer(relationship.allowed_drillpipe_sizes.all(), many=True).data
+        return DrillpipeSizeSerializer(DrillpipeSize.objects.all(), many=True).data
+
+    def get_available_minimum_ids(self, obj):
+        """Get all available minimum ID sizes"""
+        return MinimumIdSizeSerializer(MinimumIdSize.objects.all(), many=True).data
 
     def validate(self, attrs):
         pipe_type = attrs.get("pipe_selection_type") or getattr(self.instance, "pipe_selection_type", None)
@@ -121,8 +168,10 @@ class CalloutSerializer(serializers.ModelSerializer):
 
         casing = attrs.get("casing_size_inch")
         drillpipe = attrs.get("drillpipe_size_inch")
+        minimum_id = attrs.get("minimum_id_inch")
+        
         if well_profile not in allowed:
-          raise serializers.ValidationError({"well_profile": "Invalid well profile."})
+            raise serializers.ValidationError({"well_profile": "Invalid well profile."})
 
         # enforce mutual exclusivity + required selection
         if pipe_type == "casing":
@@ -135,9 +184,21 @@ class CalloutSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"drillpipe_size_inch": "Required when pipe type is drillpipe."})
             attrs["casing_size_inch"] = None
 
-        # auto minimum id = 2.0 when any size chosen
-        if (casing is not None) or (drillpipe is not None):
-            attrs["minimum_id_inch"] = Decimal("2.0")
+        # auto minimum id = 2.0 when any size chosen (if not provided)
+        if (casing is not None or drillpipe is not None) and minimum_id is None:
+            try:
+                min_id_2 = MinimumIdSize.objects.get(size=Decimal("2.0"))
+                attrs["minimum_id_inch"] = min_id_2
+            except MinimumIdSize.DoesNotExist:
+                pass
+
+        # Validate minimum ID is smaller than selected pipe
+        if minimum_id:
+            selected_pipe = casing or drillpipe
+            if selected_pipe and minimum_id.size >= selected_pipe.size:
+                raise serializers.ValidationError({
+                    'minimum_id_inch': 'Minimum ID must be smaller than selected pipe size.'
+                })
 
         return attrs
 

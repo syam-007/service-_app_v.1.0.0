@@ -22,6 +22,11 @@ router.register("service-types", core_views.ServiceTypeViewSet)
 router.register("customers", core_views.CustomerViewSet)
 router.register("wells", core_views.WellViewSet)
 router.register("hole-sections", core_views.HoleSectionViewSet)
+router.register('casing-sizes', core_views.CasingSizeViewSet)
+router.register("drillpipe-sizes", core_views.DrillpipeSizeViewSet)
+router.register("minimum-id-sizes", core_views.MinimumIdSizeViewSet)
+router.register("hole-section-relationships", core_views.HoleSectionRelationshipViewSet)
+
 router.register("schedules", core_views.ScheduleViewSet, basename="schedule")
 
 urlpatterns = [

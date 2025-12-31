@@ -181,20 +181,7 @@ class Callout(models.Model):
         ("casing", "Casing"),
         ("drillpipe", "Drillpipe"),
     ]
-    CASING_SIZE_CHOICES = [
-        (Decimal("13.375"), '13 3/8"'),
-        (Decimal("9.625"),  '9 5/8"'),
-        (Decimal("7.0"),    '7"'),
-    ]
-
-    DRILLPIPE_SIZE_CHOICES = [
-        (Decimal("4.5"), '4 1/2"'),
-        (Decimal("5.0"), '5"'),
-    ]
-
-    MINIMUM_ID_CHOICES = [
-        (Decimal("2.0"), '2"'),
-    ]
+    
     WELL_PROFILE_CHOICES = [
     ("vertical", "Vertical"),
     ("S-shape", "S-shape"),
@@ -289,14 +276,26 @@ class Callout(models.Model):
     utm_northing = models.CharField(max_length=50, blank=True)
     utm_easting = models.CharField(max_length=50, blank=True)
 
-    casing_size_inch = models.DecimalField(
-        max_digits=6, decimal_places=3, null=True, blank=True
+    casing_size_inch = models.ForeignKey(
+        CasingSize, 
+        on_delete=models.PROTECT, 
+        null=True, 
+        blank=True,
+        related_name="callouts"
     )
-    drillpipe_size_inch = models.DecimalField(
-        max_digits=6, decimal_places=2, null=True, blank=True
+    drillpipe_size_inch = models.ForeignKey(
+        DrillpipeSize, 
+        on_delete=models.PROTECT, 
+        null=True, 
+        blank=True,
+        related_name="callouts"
     )
-    minimum_id_inch = models.DecimalField(
-        max_digits=6, decimal_places=2, null=True, blank=True
+    minimum_id_inch = models.ForeignKey(
+        MinimumIdSize, 
+        on_delete=models.PROTECT, 
+        null=True, 
+        blank=True,
+        related_name="callouts"
     )
     ground_elevation_ref = models.CharField(
         max_length=10,
@@ -413,15 +412,54 @@ class Callout(models.Model):
             self.casing_size_inch = None
 
         # 2) Auto-set minimum_id to 2" if any size is selected
-        if self.casing_size_inch is not None or self.drillpipe_size_inch is not None:
-            self.minimum_id_inch = Decimal("2.0")
-
-        
-
-        
-
+        if (self.casing_size_inch is not None or self.drillpipe_size_inch is not None) and not self.minimum_id_inch:
+            try:
+                # Get the MinimumIdSize with size=2.0
+                min_id_2 = MinimumIdSize.objects.get(size=Decimal("2.0"))
+                self.minimum_id_inch = min_id_2
+            except MinimumIdSize.DoesNotExist:
+                # Create it if it doesn't exist
+                min_id_2 = MinimumIdSize.objects.create(
+                    size=Decimal("2.0"),
+                    display_name='2"'
+                )
+                self.minimum_id_inch = min_id_2
         super().save(*args, **kwargs)
 
+    def clean(self):
+        super().clean()
+        
+        # Validate pipe selections based on hole section
+        if self.hole_section and self.hole_section.relationships.exists():
+            relationship = self.hole_section.relationships.first()
+            
+            # Validate casing size
+            if self.pipe_selection_type == 'casing' and self.casing_size_inch:
+                if self.casing_size_inch not in relationship.allowed_casing_sizes.all():
+                    raise ValidationError({
+                        'casing_size_inch': f'Casing size {self.casing_size_inch.display_name} is not valid for {self.hole_section.name} hole section.'
+                    })
+            
+            # Validate drillpipe size
+            elif self.pipe_selection_type == 'drillpipe' and self.drillpipe_size_inch:
+                if self.drillpipe_size_inch not in relationship.allowed_drillpipe_sizes.all():
+                    raise ValidationError({
+                        'drillpipe_size_inch': f'Drillpipe size {self.drillpipe_size_inch.display_name} is not valid for {self.hole_section.name} hole section.'
+                    })
+            
+            # Validate minimum ID is smaller than selected pipe
+            if self.minimum_id_inch:
+                selected_pipe = self.casing_size_inch or self.drillpipe_size_inch
+                if selected_pipe and self.minimum_id_inch.size >= selected_pipe.size:
+                    raise ValidationError({
+                        'minimum_id_inch': f'Minimum ID ({self.minimum_id_inch.display_name}) must be smaller than selected pipe size ({selected_pipe.display_name})'
+                        })
+
+        
+
+        
+
+    
     def __str__(self):
         # Show the nice callout number if available
         if self.callout_number:
