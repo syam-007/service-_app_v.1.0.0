@@ -448,7 +448,7 @@ export function SroListPage() {
                     <td className="px-4 py-2 text-center">
                       <div className="inline-flex items-center gap-2">
                         <button
-                          onClick={() => navigate(`/sros/${sro.id}`)}
+                          onClick={() => navigate(`/service/sros/${sro.id}`)}
                           className="
                             inline-flex items-center justify-center rounded-full p-1.5
                             bg-slate-100 text-slate-700
@@ -550,7 +550,7 @@ export function SroListPage() {
                 <div className="inline-flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => navigate(`/sros/${sro.id}`)}
+                    onClick={() => navigate(`/service/sros/${sro.id}`)}
                     className="
                       inline-flex items-center justify-center
                       rounded-full p-1.5
@@ -668,7 +668,7 @@ export function SroListPage() {
                       <button
                         key={sro.id}
                         type="button"
-                        onClick={() => navigate(`/sros/${sro.id}`)}
+                        onClick={() => navigate(`service/sros/${sro.id}`)}
                         className="
                           w-full text-left rounded-md px-1 py-0.5
                           text-[10px] truncate
