@@ -765,10 +765,10 @@ export function CalloutListPage() {
                       </div>
 
                       <div className="inline-flex items-center gap-2">
-                        <IconAction title="View" onClick={() => navigate(`/callouts/${c.id}`)}>
+                        <IconAction title="View" onClick={() => navigate(`/service/callouts/${c.id}`)}>
                           <Eye className="h-4 w-4" />
                         </IconAction>
-                        <IconAction title="Edit" onClick={() => navigate(`/callouts/${c.id}/edit`)}>
+                        <IconAction title="Edit" onClick={() => navigate(`/service/callouts/${c.id}/edit`)}>
                           <Pencil className="h-4 w-4" />
                         </IconAction>
                         <IconAction title="Delete" onClick={() => handleDelete(c.id)}>
@@ -845,7 +845,7 @@ export function CalloutListPage() {
                           <button
                             key={c.id}
                             type="button"
-                            onClick={() => navigate(`/callouts/${c.id}`)}
+                            onClick={() => navigate(`/service/callouts/${c.id}`)}
                             className="w-full text-left rounded-md px-1 py-0.5 text-[10px] truncate bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
                             title={c.callout_number || ""}
                           >
