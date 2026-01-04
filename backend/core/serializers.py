@@ -132,6 +132,7 @@ class CalloutSerializer(serializers.ModelSerializer):
     created_by_username = serializers.CharField(source="created_by.username", read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
     field_name_display = serializers.CharField(source="field_name.field_name", read_only=True)
+    client_name = serializers.CharField(source="client.name", read_only=True)
     
     # NEW: Add serializer methods to get available options
     available_casing_sizes = serializers.SerializerMethodField()

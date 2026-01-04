@@ -15,7 +15,7 @@ User = get_user_model()
 
 class Client(models.Model):
     name = models.CharField(max_length=255)
-    code = models.CharField(max_length=50, unique=True)
+ 
 
     def __str__(self):
         return self.name
@@ -208,6 +208,13 @@ class Callout(models.Model):
 
     customer = models.ForeignKey(
         "Customer", on_delete=models.PROTECT, related_name="callouts", null=True, blank=True
+    )
+    client = models.ForeignKey(
+        "Client",
+        on_delete=models.PROTECT,
+        related_name="callouts",
+        null=True,
+        blank=True,
     )
     well = models.ForeignKey(
         "Well", on_delete=models.PROTECT, related_name="callouts", null=True, blank=True

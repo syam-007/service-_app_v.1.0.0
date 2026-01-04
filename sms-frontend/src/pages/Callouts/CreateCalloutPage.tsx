@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useCreateCallout } from "../../api/callout";
 import {
   useGetCustomers,
+  useGetClients,
   useGetRigs,
   useCreateRig,
   useGetWells,
@@ -84,6 +85,7 @@ export function CreateCalloutPage() {
 
   // Fetch dropdown data
   const { data: customers = [] } = useGetCustomers();
+  const { data: clients = [] } = useGetClients();
   const { data: fields = [] } = useGetFields();
   const { data: rigs = [], refetch: refetchRigs } = useGetRigs();
   const { mutate: createRig, isPending: isCreatingRig } = useCreateRig();
@@ -198,6 +200,7 @@ export function CreateCalloutPage() {
   // Form state
   // -----------------------------
   const [customerId, setCustomerId] = useState("");
+  const [clientId, setClientId] = useState("");
   const [rigId, setRigId] = useState("");
   const [fieldName, setFieldName] = useState("");
 
@@ -548,7 +551,7 @@ export function CreateCalloutPage() {
     }
   }, [showOrientationOptions]);
 
-  const isStep1Complete = () => customerId.trim() !== "" && rigId.trim() !== "" && fieldName.trim() !== "";
+  const isStep1Complete = () => customerId.trim() !== "" &&  clientId.trim() !== "" && rigId.trim() !== "" && fieldName.trim() !== "";
 
   // ----------------------------------------------------------
   // Progress / step status
@@ -670,6 +673,7 @@ export function CreateCalloutPage() {
       {
         rig_number: Number(rigId),
         customer: Number(customerId),
+        client: clientId ? Number(clientId) : null,
         field_name: Number(fieldName),
         well: wellId ? Number(wellId) : null,
         hole_section: holeSectionId ? Number(holeSectionId) : null,
@@ -796,13 +800,13 @@ export function CreateCalloutPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 text-xs">
-              {/* Customer dropdown */}
+              {/* Customer */}
               <div className="space-y-1">
                 <label className="block text-slate-600 dark:text-slate-300">Customer *</label>
                 <select
                   value={customerId}
                   onChange={(e) => setCustomerId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
                   required
                 >
                   <option value="">Select Customer</option>
@@ -814,13 +818,31 @@ export function CreateCalloutPage() {
                 </select>
               </div>
 
+              {/* Client */}
+              <div className="space-y-1">
+                <label className="block text-slate-600 dark:text-slate-300">Client</label>
+                <select
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+                >
+                  <option value="">Select Client</option>
+                  {clients.map((client: any) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 text-xs">
               {/* Field Name */}
-              <div className="space-y-1 text-xs">
+              <div className="space-y-1">
                 <label className="block text-slate-600 dark:text-slate-300">Field Name *</label>
                 <select
                   value={fieldName}
                   onChange={(e) => setFieldName(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50"
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
                   required
                 >
                   <option value="">Select Field</option>
@@ -832,6 +854,8 @@ export function CreateCalloutPage() {
                 </select>
               </div>
             </div>
+
+
 
             <div className="grid gap-4 md:grid-cols-2 text-xs">
               {/* Well dropdown + Create Well button */}
