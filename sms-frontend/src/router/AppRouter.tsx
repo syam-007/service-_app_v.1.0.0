@@ -19,7 +19,7 @@ import { AssignedServiceListPage } from "../pages/assinged/assignedlist";
 import { AssignedServiceViewPage } from "../pages/assinged/assignedview";
 import { AssignedServiceEditPage } from "../pages/assinged/assignededit";
 import WellsPage from "../pages/config/WellsPage";
-import RigsPage from "../pages/config/Rigspage"
+import RigsPage from "../pages/config/RigsPage"
 
 
 
