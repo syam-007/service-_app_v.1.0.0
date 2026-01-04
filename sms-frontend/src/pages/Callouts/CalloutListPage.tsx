@@ -623,11 +623,11 @@ export function CalloutListPage() {
 
                           <td className="px-4 py-2 text-center whitespace-nowrap">
                             <div className="inline-flex items-center gap-2">
-                              <IconAction title="View" onClick={() => navigate(`/callouts/${c.id}`)}>
+                              <IconAction title="View" onClick={() => navigate(`/service/callouts/${c.id}`)}>
                                 <Eye className="h-4 w-4" />
                               </IconAction>
 
-                              <IconAction title="Edit" onClick={() => navigate(`/callouts/${c.id}/edit`)}>
+                              <IconAction title="Edit" onClick={() => navigate(`/service/callouts/${c.id}/edit`)}>
                                 <Pencil className="h-4 w-4" />
                               </IconAction>
 
