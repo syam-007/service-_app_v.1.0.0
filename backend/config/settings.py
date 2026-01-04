@@ -22,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 IS_PRODUCTION = os.environ.get('RENDER', 'False') == 'True'
-SECRET_KEY = os.environ.get('SECRET_KEY')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'fallback-key') # This is the good line
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 # Quick-start development settings - unsuitable for production
