@@ -160,7 +160,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
             {!collapsed && (
               <>
-                <span className="flex-1 text-left text-xs font-medium truncate">Service</span>
+                <span className="flex-1 text-left text-xs font-medium truncate">Services</span>
                 <ChevronDown
                   className={`h-4 w-4 transition-transform ${serviceOpen ? "rotate-180" : ""}`}
                 />

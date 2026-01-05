@@ -128,7 +128,10 @@ class CalloutSerializer(serializers.ModelSerializer):
     schedule_number = serializers.SerializerMethodField()
 
     rig_number_display = serializers.CharField(source="rig_number.rig_number", read_only=True)
-    field_name_display = serializers.CharField(source="field_name.field_name", read_only=True)
+    casing_size_display = serializers.CharField(source="casing_size_inch.display_name", read_only=True)
+    drillpipe_size_display = serializers.CharField(source="drillpipe_size_inch.display_name", read_only=True)
+    minimum_id_display = serializers.CharField(source="minimum_id_inch.display_name", read_only=True)
+
     created_by_username = serializers.CharField(source="created_by.username", read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
     field_name_display = serializers.CharField(source="field_name.field_name", read_only=True)

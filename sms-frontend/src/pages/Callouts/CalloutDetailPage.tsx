@@ -83,7 +83,9 @@ export function CalloutDetailPage() {
     callout?.schedule_number ??
     (callout?.schedule && callout.schedule.schedule_number) ??
     (callout?.sro && callout.sro.schedule_number) ??
-    (callout?.sro && callout.sro.schedule && callout.sro.schedule.schedule_number) ??
+    (callout?.sro &&
+      callout.sro.schedule &&
+      callout.sro.schedule.schedule_number) ??
     null;
 
   const hasSro =
@@ -106,7 +108,7 @@ export function CalloutDetailPage() {
       : "bg-slate-50 text-slate-700 border-slate-100 dark:bg-slate-800/60 dark:text-slate-200 dark:border-slate-700";
 
   // ---------------------------
-  // Subs & Equipment visibility
+  // Equipment visibility
   // ---------------------------
   const hasWhipstock =
     callout.whipstock_orientation_depth_m !== null &&
@@ -134,7 +136,8 @@ export function CalloutDetailPage() {
     typeof callout.side_entry_sub_connection_size === "string" &&
     callout.side_entry_sub_connection_size.trim() !== "";
   const hasSideEntryDate = !!callout.side_entry_sub_date_required;
-  const hasSideEntry = hasSideEntrySize || hasSideEntryConnSize || hasSideEntryDate;
+  const hasSideEntry =
+    hasSideEntrySize || hasSideEntryConnSize || hasSideEntryDate;
 
   const hasEquipDate = !!callout.equipment_required_date;
   const hasEquipTime =
@@ -144,10 +147,14 @@ export function CalloutDetailPage() {
   const hasCrewTime =
     typeof callout.crew_required_time === "string" &&
     callout.crew_required_time.trim() !== "";
-  const hasScheduleBlock = hasEquipDate || hasEquipTime || hasCrewDate || hasCrewTime;
+  const hasScheduleBlock =
+    hasEquipDate || hasEquipTime || hasCrewDate || hasCrewTime;
 
   const hasSubsOrEquipment =
     hasOrientation || hasUbho || hasSideEntry || hasScheduleBlock;
+
+  // Selected surveys (only show what user selected)
+  const selectedSurveys = getSelectedSurveys(callout);
 
   // Convert DMS to decimal for map
   const decimalLat = dmsToDecimal(
@@ -171,18 +178,19 @@ export function CalloutDetailPage() {
             <h1 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
               {callout.callout_number}
             </h1>
+
             {/* Status pill */}
-          <span
-            className={`
-              inline-flex items-center gap-1 rounded-full border px-3 py-1
-              text-xs font-medium capitalize
-              ${statusColorClasses}
-            `}
-          >
-            <span className="h-2 w-2 rounded-full bg-green-300 dark:bg-blue-200" />
-            <span className="h-1.5 w-1.5 rounded-full bg-current/70" />
-            <span>{String(callout.status || "n/a").replace("_", " ")}</span>
-          </span>
+            <span
+              className={`
+                inline-flex items-center gap-1 rounded-full border px-3 py-1
+                text-xs font-medium capitalize
+                ${statusColorClasses}
+              `}
+            >
+              <span className="h-2 w-2 rounded-full bg-green-300 dark:bg-blue-200" />
+              <span className="h-1.5 w-1.5 rounded-full bg-current/70" />
+              <span>{String(callout.status || "n/a").replace("_", " ")}</span>
+            </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
@@ -221,10 +229,9 @@ export function CalloutDetailPage() {
 
         {/* Actions */}
         <div className="flex flex-wrap gap-2 justify-end">
-          {/* Edit Callout – only when draft */}
           <button
             type="button"
-            onClick={() => canEdit && navigate(`/callouts/${callout.id}/edit`)}
+            onClick={() => canEdit && navigate(`/service/callouts/${callout.id}/edit`)}
             disabled={!canEdit}
             className="
               group inline-flex items-center gap-1.5
@@ -239,9 +246,6 @@ export function CalloutDetailPage() {
             <span>Edit</span>
           </button>
 
-          
-
-          {/* ✅ When scheduled: show BOTH buttons */}
           {isScheduled && sroId && (
             <button
               type="button"
@@ -297,7 +301,6 @@ export function CalloutDetailPage() {
             </button>
           )}
 
-          {/* Go to SRO button when SRO is activated */}
           {!isScheduled && isSroActivated && sroId && (
             <button
               type="button"
@@ -326,7 +329,6 @@ export function CalloutDetailPage() {
             </button>
           )}
 
-          {/* Generate SRO button (hidden once SRO exists) */}
           {!hasSro && (
             <button
               type="button"
@@ -343,7 +345,6 @@ export function CalloutDetailPage() {
             </button>
           )}
 
-          {/* Back button */}
           <button
             type="button"
             onClick={() => navigate("/callouts")}
@@ -377,9 +378,9 @@ export function CalloutDetailPage() {
         </div>
       )}
 
-      {/* CONTENT GRID - FULL WIDTH, 3 CARDS ON LARGE SCREENS */}
+      {/* CONTENT GRID */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* GENERAL INFORMATION */}
+        {/* 1) GENERAL INFORMATION */}
         <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 text-xs shadow-sm h-full dark:border-slate-800 dark:bg-slate-900/80">
           <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             General Information
@@ -390,65 +391,21 @@ export function CalloutDetailPage() {
               label="Customer"
               value={callout.customer_name || callout.customer || "—"}
             />
-            <InfoRow label="Rig number" value={callout.rig_number || "—"} />
-            <InfoRow label="Field name" value={callout.field_name || "—"} />
-
+            <InfoRow
+              label="Client"
+              value={callout.client_name || "—"}
+            />
+            <InfoRow label="Rig number" value={callout.rig_number_display || "—"} />
+            <InfoRow label="Field name" value={callout.field_name_display || "—"} />
             <InfoRow label="Well" value={callout.well_name_display || "—"} />
             <InfoRow label="Well ID" value={callout.well_id_display || "—"} />
-            <InfoRow
-              label="Hole section"
-              value={callout.hole_section_display || "—"}
-            />
           </dl>
         </section>
 
-        {/* SERVICE INFORMATION */}
+        {/* 2) WELL LOCATION */}
         <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 text-xs shadow-sm h-full dark:border-slate-800 dark:bg-slate-900/80">
           <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Type of Service
-          </h2>
-
-          <dl className="space-y-2 mb-3">
-            <InfoRow
-              label="Service category"
-              value={callout.service_category || "—"}
-            />
-          </dl>
-
-          <div className="grid gap-4 sm:grid-cols-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-            <div>
-              <p className="mb-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                Wireline gyro
-              </p>
-              <ul className="space-y-1 text-[11px] text-slate-600 dark:text-slate-200">
-                <BoolRow label="Casing survey" value={callout.wireline_casing_survey} />
-                <BoolRow label="Orientation survey" value={callout.wireline_orientation_survey} />
-                <BoolRow label="Drillpipe survey" value={callout.wireline_drillpipe_survey} />
-                <BoolRow label="Pump down survey" value={callout.wireline_pumpdown_survey} />
-                <BoolRow label="Orientation / multishot" value={callout.wireline_orientation_multishot_survey} />
-              </ul>
-            </div>
-
-            <div>
-              <p className="mb-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                Memory gyro
-              </p>
-              <ul className="space-y-1 text-[11px] text-slate-600 dark:text-slate-200">
-                <BoolRow label="Casing (slickline / memory)" value={callout.memory_casing_slickline} />
-                <BoolRow label="Drillpipe (slickline / memory)" value={callout.memory_drillpipe_slickline} />
-                <BoolRow label="Pump down survey" value={callout.memory_pumpdown_survey} />
-                <BoolRow label="Drop gyro < 20" value={callout.drop_gyro_lt_20} />
-                <BoolRow label="Drop gyro > 20" value={callout.drop_gyro_gt_20} />
-                <BoolRow label="Dry hole drop system" value={callout.dry_hole_drop_gyro_system} />
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* WELL & SURVEY */}
-        <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 text-xs shadow-sm h-full dark:border-slate-800 dark:bg-slate-900/80">
-          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Well &amp; Survey
+            Well Location
           </h2>
 
           <div className="space-y-3">
@@ -458,34 +415,31 @@ export function CalloutDetailPage() {
               </h3>
               <dl className="space-y-1">
                 <InfoRow
-                  label="Latitude (deg / min / sec)"
+                  label="Latitude (DMS)"
                   value={`${callout.well_center_lat_deg ?? "—"}° ${callout.well_center_lat_min ?? "—"}′ ${callout.well_center_lat_sec ?? "—"}″`}
                 />
                 <InfoRow
-                  label="Longitude (deg / min / sec)"
+                  label="Longitude (DMS)"
                   value={`${callout.well_center_lng_deg ?? "—"}° ${callout.well_center_lng_min ?? "—"}′ ${callout.well_center_lng_sec ?? "—"}″`}
                 />
                 <InfoRow
-                  label="UTM northing / easting"
-                  value={`${callout.utm_northing || "—"} / ${callout.utm_easting || "—"}`}
+                  label="UTM (N / E)"
+                  value={
+                    <div className="flex gap-1">
+                      <span>{callout.utm_northing || "—"}</span>
+                      <span className="text-red-500">N</span>
+                      <span>/</span>
+                      <span>{callout.utm_easting || "—"}</span>
+                      <span className="text-green-500">E</span>
+                    </div>
+                  }
                 />
               </dl>
             </div>
 
-            <div>
+            <div className="border-t border-slate-100 pt-3 dark:border-slate-800">
               <h3 className="mb-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                Well geometry
-              </h3>
-              <dl className="space-y-1">
-                <InfoRow label="Casing size (in)" value={callout.casing_size_inch ?? "—"} />
-                <InfoRow label="Drillpipe size (in)" value={callout.drillpipe_size_inch ?? "—"} />
-                <InfoRow label="Minimum ID (in)" value={callout.minimum_id_inch ?? "—"} />
-              </dl>
-            </div>
-
-            <div>
-              <h3 className="mb-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                Survey
+                Survey Depths
               </h3>
               <dl className="space-y-1">
                 <InfoRow label="Start depth (m)" value={callout.survey_start_depth_m ?? "—"} />
@@ -496,11 +450,61 @@ export function CalloutDetailPage() {
           </div>
         </section>
 
-        {/* SUBS & EQUIPMENT – ONLY SHOW IF ANYTHING WAS ENTERED */}
+        {/* 3) TYPE OF SERVICE */}
+        <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 text-xs shadow-sm h-full dark:border-slate-800 dark:bg-slate-900/80">
+          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Type of Service
+          </h2>
+
+          <dl className="space-y-2 mb-3">
+            <InfoRow label="Service category" value={callout.service_category || "—"} />
+          </dl>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/30">
+            <h3 className="mb-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+              Selected surveys
+            </h3>
+
+            {selectedSurveys.length > 0 ? (
+              <ul className="space-y-1 text-[11px] text-slate-700 dark:text-slate-200">
+                {selectedSurveys.map((label) => (
+                  <li key={label} className="flex items-center justify-between gap-3">
+                    <span className="truncate">{label}</span>
+                   
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                No surveys selected.
+              </p>
+            )}
+          </div>
+
+          <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+            <h3 className="mb-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+              Well geometry
+            </h3>
+
+            <dl className="space-y-1">
+              <InfoRow label="Hole section" value={callout.hole_section_display ?? "—"} />
+
+              {callout.pipe_selection_type === "casing" ? (
+                <InfoRow label="Casing size (in)" value={callout.casing_size_display ?? "—"} />
+              ) : callout.pipe_selection_type === "drillpipe" ? (
+                <InfoRow label="Drillpipe size (in)" value={callout.drillpipe_size_display ?? "—"} />
+              ) : null}
+
+              <InfoRow label="Minimum ID (in)" value={callout.minimum_id_display ?? "—"} />
+            </dl>
+          </div>
+        </section>
+
+        {/* 4) EQUIPMENT */}
         {hasSubsOrEquipment && (
           <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 text-xs shadow-sm h-full dark:border-slate-800 dark:bg-slate-900/80">
             <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Subs &amp; Equipment
+              Equipment
             </h2>
 
             <div className="space-y-3">
@@ -532,7 +536,9 @@ export function CalloutDetailPage() {
                     UBHO sub
                   </h3>
                   <dl className="space-y-1">
-                    {hasUbhoSize && <InfoRow label="UBHO sub size" value={callout.ubho_sub_size} />}
+                    {hasUbhoSize && (
+                      <InfoRow label="UBHO sub size" value={callout.ubho_sub_size} />
+                    )}
                     {hasUbhoConnSize && (
                       <InfoRow label="UBHO connection size" value={callout.ubho_sub_connection_size} />
                     )}
@@ -577,23 +583,29 @@ export function CalloutDetailPage() {
                     Schedule
                   </h3>
                   <dl className="space-y-1">
-                    {hasEquipDate && (
+                  {hasEquipDate && (
                       <InfoRow
                         label="Equipment required (date)"
-                        value={new Date(callout.equipment_required_date).toLocaleDateString()}
+                        value={formatDateDDMonYYYY(callout.equipment_required_date)}
                       />
                     )}
                     {hasEquipTime && (
-                      <InfoRow label="Equipment required (time)" value={callout.equipment_required_time} />
+                      <InfoRow
+                        label="Equipment required (time)"
+                        value={formatTimeAMPM(callout.equipment_required_time)}
+                      />
                     )}
                     {hasCrewDate && (
                       <InfoRow
                         label="Crew required (date)"
-                        value={new Date(callout.crew_required_date).toLocaleDateString()}
+                        value={formatDateDDMonYYYY(callout.crew_required_date)}
                       />
                     )}
                     {hasCrewTime && (
-                      <InfoRow label="Crew required (time)" value={callout.crew_required_time} />
+                      <InfoRow
+                        label="Crew required (time)"
+                        value={formatTimeAMPM(callout.crew_required_time)}
+                      />
                     )}
                   </dl>
                 </div>
@@ -602,10 +614,10 @@ export function CalloutDetailPage() {
           </section>
         )}
 
-        {/* CONTACT & NOTES */}
+        {/* 5) CONTACT */}
         <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 text-xs shadow-sm h-full dark:border-slate-800 dark:bg-slate-900/80">
           <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Contact &amp; Comments
+            Contact
           </h2>
 
           <dl className="space-y-2 mb-4">
@@ -625,7 +637,7 @@ export function CalloutDetailPage() {
           </div>
         </section>
 
-        {/* LOCATION MAP */}
+        {/* 6) MAP (after Contact, same card size) */}
         <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 text-xs shadow-sm h-full dark:border-slate-800 dark:bg-slate-900/80">
           <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Location Map (Oman)
@@ -651,28 +663,6 @@ function InfoRow({ label, value }: InfoRowProps) {
         {value}
       </dd>
     </div>
-  );
-}
-
-type BoolRowProps = { label: string; value: boolean };
-
-function BoolRow({ label, value }: BoolRowProps) {
-  return (
-    <li className="flex items-center justify-between gap-3">
-      <span>{label}</span>
-      <span
-        className={`
-          inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium
-          ${
-            value
-              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200"
-              : "bg-slate-50 text-slate-500 dark:bg-slate-800/60 dark:text-slate-300"
-          }
-        `}
-      >
-        {value ? "Yes" : "No"}
-      </span>
-    </li>
   );
 }
 
@@ -727,4 +717,61 @@ function OmanMap({ lat, lng }: OmanMapProps) {
   }, [lat, lng]);
 
   return <div ref={mapContainerRef} className="w-full h-full" />;
+}
+
+/** Only show what user selected (example: "Memory gyro • Pump down survey") */
+function getSelectedSurveys(callout: any): string[] {
+  const cat = String(callout?.service_category ?? "").toLowerCase();
+
+  const wireline = [
+    { key: "wireline_casing_survey", label: "Wireline gyro • Casing survey" },
+    { key: "wireline_orientation_survey", label: "Wireline gyro • Orientation survey" },
+    { key: "wireline_drillpipe_survey", label: "Wireline gyro • Drillpipe survey" },
+    { key: "wireline_pumpdown_survey", label: "Wireline gyro • Pump down survey" },
+    { key: "wireline_orientation_multishot_survey", label: "Wireline gyro • Orientation / multishot" },
+  ];
+
+  const memory = [
+    { key: "memory_casing_slickline", label: "Memory gyro • Casing (slickline / memory)" },
+    { key: "memory_drillpipe_slickline", label: "Memory gyro • Drillpipe (slickline / memory)" },
+    { key: "memory_pumpdown_survey", label: "Memory gyro • Pump down survey" },
+    { key: "drop_gyro_lt_20", label: "Drop gyro • < 20" },
+    { key: "drop_gyro_gt_20", label: "Drop gyro • > 20" },
+    { key: "dry_hole_drop_gyro_system", label: "Dry hole • Drop gyro system" },
+  ];
+
+  const list =
+    cat.includes("wireline")
+      ? wireline
+      : cat.includes("memory")
+      ? memory
+      : [...wireline, ...memory];
+
+  return list.filter((x) => !!callout?.[x.key]).map((x) => x.label);
+}
+function formatDateDDMonYYYY(input?: string | null): string {
+  if (!input) return "—";
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime())) return "—";
+
+  const day = String(d.getDate()).padStart(2, "0");
+  const mon = d.toLocaleString("en-GB", { month: "short" }).toUpperCase(); // jan, feb...
+  const year = d.getFullYear();
+
+  return `${day}-${mon}-${year}`; // 05-jan-2026
+}
+
+function formatTimeAMPM(time?: string | null): string {
+  if (!time) return "—";
+
+  // expected format: HH:mm or HH:mm:ss
+  const [h, m] = time.split(":");
+  const hour24 = Number(h);
+
+  if (Number.isNaN(hour24)) return "—";
+
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+
+  return `${hour12}:${m} ${period}`; // e.g. 5:08 PM
 }

@@ -100,6 +100,151 @@ const getStatusStyles = (statusRaw: string) => {
 const prettyStatus = (s: any) => String(s || "—").replaceAll("_", " ");
 
 /* ---------------- Page ---------------- */
+function CalloutListShimmer() {
+  return (
+    <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+      {/* HERO HEADER shimmer */}
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200/70 dark:border-slate-800 bg-white/70 dark:bg-slate-950/60 backdrop-blur shadow-sm">
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 opacity-80" />
+        <div className="absolute inset-0 shimmer" />
+
+        <div className="relative p-4 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-7 w-56 rounded-xl" />
+              <Skeleton className="h-3 w-72 rounded-lg" />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2">
+              <Skeleton className="h-9 w-44 rounded-full" />
+              <Skeleton className="h-9 w-9 rounded-full" />
+              <Skeleton className="h-9 w-36 rounded-full" />
+            </div>
+          </div>
+
+          {/* FILTERS shimmer */}
+          <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <Skeleton className="h-10 w-full md:max-w-xs rounded-xl" />
+
+            <div className="w-full md:w-auto flex flex-wrap gap-2 justify-start md:justify-end">
+              <Skeleton className="h-10 w-[180px] rounded-xl" />
+              <Skeleton className="h-10 w-[180px] rounded-xl" />
+              <Skeleton className="h-10 w-[160px] rounded-xl" />
+              <Skeleton className="h-10 w-[170px] rounded-xl" />
+              <Skeleton className="h-10 w-[170px] rounded-xl" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* TABLE shimmer */}
+      <div className="rounded-2xl border border-slate-200 bg-white text-xs shadow-sm dark:border-slate-800 dark:bg-slate-950/60 overflow-hidden">
+        <div className="overflow-x-auto">
+          <div className="max-h-[70vh] overflow-y-auto">
+            <table className="min-w-[1250px] w-full divide-y divide-slate-200 dark:divide-slate-800">
+              <thead className="bg-slate-50 dark:bg-slate-800/60 sticky top-0 z-10">
+                <tr>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <th key={i} className="px-4 py-3">
+                      <Skeleton className="h-3 w-24 rounded-md" />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                {Array.from({ length: 10 }).map((_, row) => (
+                  <tr key={row} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                    <td className="px-4 py-3">
+                      <Skeleton className="h-4 w-28 rounded-lg" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Skeleton className="h-4 w-40 rounded-lg" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Skeleton className="h-4 w-24 rounded-lg" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Skeleton className="h-4 w-32 rounded-lg" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Skeleton className="h-4 w-28 rounded-lg" />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <Skeleton className="h-8 w-28 rounded-full mx-auto" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Skeleton className="h-6 w-28 rounded-full" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="px-4 py-2 text-[11px] text-slate-500 dark:text-slate-400 sm:hidden">
+          Tip: swipe left/right to see all columns.
+        </div>
+      </div>
+
+      {/* shimmer css (inline) */}
+      <style>{`
+        .shimmer {
+          background: linear-gradient(
+            90deg,
+            rgba(255,255,255,0) 0%,
+            rgba(255,255,255,0.35) 50%,
+            rgba(255,255,255,0) 100%
+          );
+          transform: translateX(-100%);
+          animation: shimmerMove 1.2s infinite;
+          opacity: 0.6;
+          pointer-events: none;
+        }
+
+        @keyframes shimmerMove {
+          100% { transform: translateX(100%); }
+        }
+
+        @media (prefers-color-scheme: dark) {
+          .shimmer {
+            background: linear-gradient(
+              90deg,
+              rgba(2,6,23,0) 0%,
+              rgba(148,163,184,0.18) 50%,
+              rgba(2,6,23,0) 100%
+            );
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/** Basic skeleton block */
+function Skeleton({ className }: { className: string }) {
+  return (
+    <div
+      className={[
+        "relative overflow-hidden",
+        "bg-slate-200/70 dark:bg-slate-800/70",
+        "animate-pulse",
+        className,
+      ].join(" ")}
+    >
+      <div className="absolute inset-0 shimmer" />
+    </div>
+  );
+}
+
 
 export function CalloutListPage() {
   const navigate = useNavigate();
@@ -313,7 +458,7 @@ export function CalloutListPage() {
     return map;
   }, [rows]);
 
-  if (isLoading) return <div className="p-4 text-sm">Loading callouts…</div>;
+  if (isLoading) return <CalloutListShimmer />;
   if (error) return <div className="p-4 text-sm">Failed to load callouts</div>;
 
   // calendar helpers

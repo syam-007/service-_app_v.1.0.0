@@ -270,7 +270,7 @@ export function AssignedServiceListPage() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => navigate(`/assigned-services/${r.id}`)}
+                          onClick={() => navigate(`/service/assigned-services/${r.id}`)}
                           className="
                             inline-flex items-center justify-center
                             rounded-full p-2
@@ -287,7 +287,7 @@ export function AssignedServiceListPage() {
 
                         <button
                           type="button"
-                          onClick={() => navigate(`/assigned-services/${r.id}/edit`)}
+                          onClick={() => navigate(`/service/assigned-services/${r.id}/edit`)}
                           className="
                             inline-flex items-center justify-center
                             rounded-full p-2
