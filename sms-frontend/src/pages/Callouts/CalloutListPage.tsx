@@ -346,7 +346,7 @@ export function CalloutListPage() {
           }
         }
 
-        if (newSroId) navigate(`/sros/${newSroId}`);
+        if (newSroId) navigate(`/service/sros/${newSroId}`);
       },
       onSettled: () => setGeneratingId(null),
     });
@@ -390,11 +390,10 @@ export function CalloutListPage() {
       const q = search.toLowerCase();
       result = result.filter((c) => {
         return (
-          (c.callout_number || "").toLowerCase().includes(q) ||
-          (c.rig_number || "").toLowerCase().includes(q) ||
-          (c.well_name_display || "").toLowerCase().includes(q) ||
-          (c.field_name || "").toLowerCase().includes(q) ||
-          (c.created_by_username || "").toLowerCase().includes(q)
+          
+          (c.rig_number_display || "").toLowerCase().includes(q) ||
+          (c.client_name || "").toLowerCase().includes(q) ||
+          (c.customer_name || "").toLowerCase().includes(q)
         );
       });
     }
@@ -654,6 +653,7 @@ export function CalloutListPage() {
                   <thead className="bg-slate-50 dark:bg-slate-800/60 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 py-2 text-left font-medium text-slate-500 text-center">Customer</th>
+                      <th className="px-4 py-2 text-left font-medium text-slate-500">Client</th>
                       <th className="px-4 py-2 text-left font-medium text-slate-500">Well Name</th>
                       <th className="px-4 py-2 text-left font-medium text-slate-500">Rig Number</th>
                       <th className="px-4 py-2 text-left font-medium text-slate-500">Service Type</th>
@@ -683,6 +683,9 @@ export function CalloutListPage() {
                         <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
                           <td className="px-4 py-2 text-slate-700 dark:text-slate-200 whitespace-nowrap text-center">
                             {c.customer_name ?? `CALL_OUT_${c.id}`}
+                          </td>
+                          <td className="px-4 py-2 text-slate-700 dark:text-slate-200 whitespace-nowrap text-center">
+                            {c.client_name ?? "_"}
                           </td>
 
                           <td className="px-4 py-2 text-slate-700 dark:text-slate-200 whitespace-nowrap">
@@ -749,7 +752,7 @@ export function CalloutListPage() {
                               /* 5) Otherwise -> Go to SRO */
                               <button
                                 type="button"
-                                onClick={() => sroId && navigate(`/sros/${sroId}`)}
+                                onClick={() => sroId && navigate(`/service/sros/${sroId}`)}
                                 className="inline-flex items-center justify-center rounded-full px-3 py-1.5 text-[11px] font-medium border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 transition"
                                 title="Go to SRO"
                                 disabled={!sroId}
@@ -889,7 +892,7 @@ export function CalloutListPage() {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => sroId && navigate(`/sros/${sroId}`)}
+                          onClick={() => sroId && navigate(`/service/sros/${sroId}`)}
                           className="inline-flex items-center justify-center rounded-full px-3 py-1.5 text-[11px] font-medium border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 transition"
                           disabled={!sroId}
                         >

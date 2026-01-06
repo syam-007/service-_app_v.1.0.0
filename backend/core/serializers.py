@@ -1,4 +1,5 @@
 from rest_framework import serializers
+
 from decimal import Decimal
 from django.contrib.auth.models import User
 from .models import (Client,Customer, Rig, ServiceType, Callout, SRO,Schedule, Job,
@@ -67,6 +68,20 @@ class FieldSerializer(serializers.ModelSerializer):
     class Meta:
         model = Field
         fields = "__all__"
+
+        def validate_field_name(self, value):
+            v = (value or "").strip()
+            if not v:
+                raise serializers.ValidationError("Field name is required.")
+
+            qs = Field.objects.filter(field_name__iexact=v)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+
+            if qs.exists():
+                raise serializers.ValidationError("Field name already exists (case-insensitive).")
+
+            return v
 
 class HoleSectionSerializer(serializers.ModelSerializer):
     class Meta:

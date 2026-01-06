@@ -1,6 +1,8 @@
 # core/views.py
 import csv
 import io
+from django.utils import timezone
+from django.db.models import Count
 from datetime import datetime, date
 from django.db import transaction
 from rest_framework.decorators import action
@@ -327,6 +329,8 @@ class ServiceTypeViewSet(BaseViewSet):  # Added BaseViewSet inheritance
     queryset = ServiceType.objects.all()
     serializer_class = ServiceTypeSerializer
 
+
+
 # core/views.py - Update the get_available_options method
 
 class HoleSectionViewSet(BaseViewSet):
@@ -492,6 +496,127 @@ class HoleSectionRelationshipViewSet(viewsets.ModelViewSet):
             ).data
         
         return Response(data)
+
+class DashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_date_range(self, request):
+        """
+        range = today | week | custom
+        custom: start=YYYY-MM-DD, end=YYYY-MM-DD (inclusive)
+        """
+        range_type = request.query_params.get("range", "today")
+        now = timezone.localtime(timezone.now())
+
+        if range_type == "week":
+            # Monday -> Sunday
+            start = now - timezone.timedelta(days=now.weekday())
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + timezone.timedelta(days=7)
+
+        elif range_type == "custom":
+            start_str = request.query_params.get("start")
+            end_str = request.query_params.get("end")
+
+            # fallback to today if missing
+            if not start_str or not end_str:
+                start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                end = start + timezone.timedelta(days=1)
+            else:
+                # parse YYYY-MM-DD
+                start_date = timezone.datetime.fromisoformat(start_str).date()
+                end_date = timezone.datetime.fromisoformat(end_str).date()
+
+                start = timezone.make_aware(
+                    timezone.datetime.combine(start_date, timezone.datetime.min.time())
+                )
+                # end is exclusive, so +1 day
+                end = timezone.make_aware(
+                    timezone.datetime.combine(end_date + timezone.timedelta(days=1), timezone.datetime.min.time())
+                )
+
+        else:  # today
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + timezone.timedelta(days=1)
+
+        return start, end, range_type
+
+    def get(self, request):
+        start, end, range_type = self.get_date_range(request)
+
+        # ---- KPI: total callouts (all time) ----
+        total_callouts = Callout.objects.count()
+
+        # ---- SRO pipeline for selected range (group by status) ----
+        sro_qs = SRO.objects.filter(created_at__gte=start, created_at__lt=end)
+
+        pipeline_raw = (
+            sro_qs.values("status")
+            .annotate(count=Count("id"))
+            .order_by("status")
+        )
+        sro_pipeline = [{"status": p["status"], "count": p["count"]} for p in pipeline_raw]
+
+        # ---- Active/Scheduled counts (all time OR range—your choice) ----
+        active_sros = SRO.objects.filter(status="active").count()
+        scheduled_sros = SRO.objects.filter(status="scheduled").count()
+
+        ready_for_scheduling = SRO.objects.filter(status="ready_for_scheduling").count()
+
+        # ---- Jobs today (based on created_at; if you have scheduled datetime, swap it) ----
+        jobs_in_range = Job.objects.filter(
+            scheduled_start__lt=end,
+            scheduled_end__gte=start,
+        ).count()
+
+        # ---- Today’s SRO list/table ----
+        # Keep it small for dashboard view (top 10)
+        sros_list = (
+            sro_qs.select_related("callout", "callout__client", "callout__rig_number")
+            .order_by("-created_at")[:10]
+        )
+
+        sros_today = []
+        for s in sros_list:
+            sros_today.append({
+                "id": s.id,
+                "number": s.sro_number,
+                "client": getattr(getattr(s.callout, "client", None), "name", "") if s.callout else "",
+                "rig": getattr(getattr(s.callout, "rig_number", None), "rig_number", "") if s.callout else "",
+                "service": getattr(s.callout, "service_category", "") if s.callout else "",
+                "status": s.status,
+                "start": "-",  # if you have schedule start time, fill it here
+                "end": "-",    # if you have schedule end time, fill it here
+            })
+
+        # ---- Activity (latest 10) ----
+        # Example: ExecutionLogEntry – adjust fields if needed
+        activity_qs = ExecutionLogEntry.objects.order_by("-created_at")[:10]
+        activity = []
+        for a in activity_qs:
+            activity.append({
+                "id": a.id,
+                "time": timezone.localtime(a.created_at).strftime("%H:%M"),
+                "title": "Execution log added",
+                "detail": str(a)[:160],  # keep short
+            })
+
+        return Response({
+            "range": range_type,
+            "start": start.date().isoformat(),
+            "end": (end - timezone.timedelta(days=1)).date().isoformat(),
+            "kpis": {
+                "total_callouts": total_callouts,
+                "active_sros": active_sros,
+                "scheduled_sros": scheduled_sros,
+                "ready_for_scheduling": ready_for_scheduling,
+                
+                "crew_utilization": 82,  # replace when you have crew/shift model
+            },
+            "pipeline": sro_pipeline,
+            "sros": sros_today,
+            "activity": activity,
+        })
 
 class CalloutViewSet(BaseViewSet):
     queryset = Callout.objects.all()

@@ -10,6 +10,7 @@ from django.core.validators import RegexValidator
 from django.core.validators import EmailValidator
 from django.utils import timezone
 from datetime import date
+from django.db.models.functions import Lower
 User = get_user_model()
 
 
@@ -57,6 +58,20 @@ class Resource(models.Model):
 
 class Field(models.Model):
     field_name = models.CharField(max_length=255)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                Lower("field_name"),
+                name="unique_field_name_lower",
+            )
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.field_name:
+            self.field_name = self.field_name.strip()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.field_name
 
@@ -462,11 +477,6 @@ class Callout(models.Model):
                         'minimum_id_inch': f'Minimum ID ({self.minimum_id_inch.display_name}) must be smaller than selected pipe size ({selected_pipe.display_name})'
                         })
 
-        
-
-        
-
-    
     def __str__(self):
         # Show the nice callout number if available
         if self.callout_number:
@@ -495,17 +505,16 @@ class SRO(models.Model):
         related_name="sro",
     )
 
-    # 🔹 Per-customer sequence (hidden technical field)
+    # 🔹 Sequence number (resets every year)
     sro_sequence = models.PositiveIntegerField(
         null=True,
         blank=True,
         editable=False,
     )
 
-    # 🔹 Human-friendly SRO number (what you display)
-    # Format: SRO-<CUSTOMER>-<SEQ>, e.g. SRO-PDO-1101
+    # 🔹 SRYY####  (e.g. SR260001)
     sro_number = models.CharField(
-        max_length=50,
+        max_length=20,
         unique=True,
         editable=False,
     )
@@ -531,38 +540,26 @@ class SRO(models.Model):
     def save(self, *args, **kwargs):
         is_new = self.pk is None
 
-        # Only generate number + status on first save
         if is_new:
-            # 🔹 When an SRO is generated, force it to "active"
             self.status = "active"
 
-            customer = None
-            customer_name = "GEN"
+            # 🔹 Current year
+            now = timezone.now()
+            year = now.year
+            year_short = str(year)[-2:]  # e.g. 2026 → "26"
 
-            if self.callout and self.callout.customer:
-                customer = self.callout.customer
-                if getattr(customer, "name", None):
-                    # Example: "Petroleum Development Oman" -> "PETROLEUMDEVELOPMENTOMAN"
-                    customer_name = customer.name.upper().replace(" ", "")
-            
-            # 🔹 Determine next sequence for this customer
-            #     For PDO: 1101, 1102, 1103, ...
-            #     For BP:  1101, 1102, ...
-            if self.sro_sequence is None:
-                qs = SRO.objects.all()
-                if customer is not None:
-                    qs = qs.filter(callout__customer=customer)
+            # 🔹 Get last sequence for the SAME YEAR
+            last_seq = (
+                SRO.objects
+                .filter(created_at__year=year)
+                .aggregate(max_seq=Max("sro_sequence"))
+                ["max_seq"]
+            )
 
-                last = qs.aggregate(max_seq=Max("sro_sequence"))["max_seq"]
+            self.sro_sequence = (last_seq or 0) + 1
 
-                if last is None or last < 1101:
-                    self.sro_sequence = 1101
-                else:
-                    self.sro_sequence = last + 1
-
-            # 🔹 Build SRO number string
-            # Example: SRO-PDO-1101
-            self.sro_number = f"SRO-{customer_name}-{self.sro_sequence}"
+            # 🔹 Format: SR260001
+            self.sro_number = f"SR{year_short}{self.sro_sequence:04d}"
 
         super().save(*args, **kwargs)
 

@@ -1,5 +1,6 @@
 // src/pages/Callouts/CreateCalloutPage.tsx
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect} from "react";
+import Select from "react-select";
 import { useNavigate } from "react-router-dom";
 import { useCreateCallout } from "../../api/callout";
 import {
@@ -7,6 +8,7 @@ import {
   useGetClients,
   useGetRigs,
   useCreateRig,
+  useCreateField,
   useGetWells,
   useGetHoleSections,
   useCreateWell,
@@ -86,7 +88,8 @@ export function CreateCalloutPage() {
   // Fetch dropdown data
   const { data: customers = [] } = useGetCustomers();
   const { data: clients = [] } = useGetClients();
-  const { data: fields = [] } = useGetFields();
+  const { data: fields = [], refetch: refetchFields } = useGetFields();
+  const { mutate: createField, isPending: isCreatingField } = useCreateField();
   const { data: rigs = [], refetch: refetchRigs } = useGetRigs();
   const { mutate: createRig, isPending: isCreatingRig } = useCreateRig();
   const { data: wells = [], refetch: refetchWells } = useGetWells();
@@ -97,6 +100,10 @@ export function CreateCalloutPage() {
   const { data: allCasingSizes = [] } = useGetCasingSizes();
   const { data: allDrillpipeSizes = [] } = useGetDrillpipeSizes();
   const { data: allMinimumIdSizes = [] } = useGetMinimumIdSizes();
+
+  const [isFieldModalOpen, setIsFieldModalOpen] = useState(false);
+  const [newFieldName, setNewFieldName] = useState("");
+  const [fieldCreateError, setFieldCreateError] = useState<string>("");
 
   // -----------------------------
   // Create Rig modal state
@@ -130,6 +137,40 @@ export function CreateCalloutPage() {
       }
     );
   };
+  const handleCreateFieldSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFieldCreateError("");
+  
+    const name = newFieldName.trim();
+    if (!name) {
+      setFieldCreateError("Field name is required.");
+      return;
+    }
+  
+    createField(
+      { field_name: name },
+      {
+        onSuccess: (created: any) => {
+          refetchFields();
+          setFieldName(String(created.id)); // auto-select created field
+          setIsFieldModalOpen(false);
+          setNewFieldName("");
+        },
+        onError: (err: any) => {
+          const msg =
+            err?.response?.data?.field_name?.[0] ||
+            err?.response?.data?.detail ||
+            "Failed to create field.";
+          setFieldCreateError(String(msg));
+        },
+      }
+    );
+  };
+
+  const fieldOptions = fields.map((f: any) => ({
+    value: f.id,
+    label: f.field_name,
+  }));
 
   // -----------------------------
   // Create Well modal state
@@ -551,13 +592,13 @@ export function CreateCalloutPage() {
     }
   }, [showOrientationOptions]);
 
-  const isStep1Complete = () => customerId.trim() !== "" &&  clientId.trim() !== "" && rigId.trim() !== "" && fieldName.trim() !== "";
+  const isStep1Complete = () => customerId.trim() !== "" &&  clientId.trim() !== "" && rigId.trim() !== "" ;
 
   // ----------------------------------------------------------
   // Progress / step status
   // ----------------------------------------------------------
   const steps = useMemo(() => {
-    const refsComplete = !!customerId && !!rigId && !!fieldName;
+    const refsComplete = !!customerId && !!rigId;
 
     const wellGroupComplete =
       !!wellId ||
@@ -835,27 +876,30 @@ export function CreateCalloutPage() {
                 </select>
               </div>
             </div>
-            <div className="grid gap-4 md:grid-cols-2 text-xs">
-              {/* Field Name */}
-              <div className="space-y-1">
-                <label className="block text-slate-600 dark:text-slate-300">Field Name *</label>
-                <select
-                  value={fieldName}
-                  onChange={(e) => setFieldName(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
-                  required
+            {/* Field Name */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="block text-slate-600 dark:text-slate-300">Field Name</label>
+
+                <button
+                  type="button"
+                  onClick={() => setIsFieldModalOpen(true)}
+                  className="text-[10px] rounded-full border border-slate-300 px-2 py-0.5 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
-                  <option value="">Select Field</option>
-                  {fields.map((f: any) => (
-                    <option key={f.id} value={f.id}>
-                      {f.field_name}
-                    </option>
-                  ))}
-                </select>
+                  + Create Field
+                </button>
               </div>
+
+              <Select
+                options={fieldOptions}
+                isClearable
+                placeholder="Search or select field (optional)"
+                value={fieldOptions.find((o) => String(o.value) === fieldName) || null}
+                onChange={(opt) => setFieldName(opt ? String(opt.value) : "")}
+                classNamePrefix="react-select"
+                className="text-sm"
+              />
             </div>
-
-
 
             <div className="grid gap-4 md:grid-cols-2 text-xs">
               {/* Well dropdown + Create Well button */}
@@ -1854,6 +1898,70 @@ export function CreateCalloutPage() {
           </div>
         </div>
       )}
+      {/* ✅ CREATE FIELD MODAL */}
+{isFieldModalOpen && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-4 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Create Field</h2>
+        <button
+          type="button"
+          onClick={() => {
+            setIsFieldModalOpen(false);
+            setNewFieldName("");
+            setFieldCreateError("");
+          }}
+          className="text-[11px] text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-100"
+        >
+          ✕
+        </button>
+      </div>
+
+      <form className="space-y-3" onSubmit={handleCreateFieldSubmit}>
+        <div className="space-y-1">
+          <label className="block text-[11px] text-slate-500">
+            Field Name <span className="text-rose-500">*</span>
+          </label>
+          <input
+            value={newFieldName}
+            onChange={(e) => setNewFieldName(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+            placeholder="e.g. North Field"
+            required
+          />
+          {fieldCreateError && (
+            <p className="text-[11px] text-rose-600 dark:text-rose-400">{fieldCreateError}</p>
+          )}
+        </div>
+
+        <div className="mt-3 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setIsFieldModalOpen(false);
+              setNewFieldName("");
+              setFieldCreateError("");
+            }}
+            className="text-xs rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            disabled={isCreatingField}
+            className="text-xs rounded-full border border-emerald-500 bg-emerald-500 px-3 py-1.5 font-medium text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isCreatingField ? "Creating…" : "Create Field"}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
+
+
+
     </div>
   );
 }

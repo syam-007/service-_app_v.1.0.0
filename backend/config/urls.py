@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from core import views as core_views
-from core.views import RegisterView, EmployeeBulkUploadAPIView  # ✅ add this
+from core.views import RegisterView, EmployeeBulkUploadAPIView,DashboardView  # ✅ add this
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 router = DefaultRouter()
@@ -31,6 +31,7 @@ router.register("schedules", core_views.ScheduleViewSet, basename="schedule")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+     path("api/dashboard/", DashboardView.as_view(), name="dashboard"),
      path("api/employees/bulk-upload/", EmployeeBulkUploadAPIView.as_view(), name="employee-bulk-upload"),
     path("api/", include(router.urls)),
     path("api/auth/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),

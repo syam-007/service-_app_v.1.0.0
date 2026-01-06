@@ -45,3 +45,21 @@
       transparent
     );
   }
+
+
+  .react-select__control {
+    @apply rounded-xl border border-slate-300 bg-slate-50 min-h-[38px];
+  }
+  
+  .react-select__menu {
+    @apply bg-white border border-slate-200 rounded-xl shadow-md;
+  }
+  
+  .react-select__option--is-focused {
+    @apply bg-slate-100;
+  }
+  
+  .react-select__option--is-selected {
+    @apply bg-slate-900 text-white;
+  }
+  
