@@ -494,7 +494,7 @@ export function DashboardPage() {
                   <th className="px-3 py-2 text-left font-medium">Client / Rig</th>
                   <th className="px-3 py-2 text-left font-medium">Service</th>
                   <th className="px-3 py-2 text-left font-medium">Status</th>
-                  <th className="px-3 py-2 text-left font-medium">Planned</th>
+                  
                   <th className="px-3 py-2 text-left font-medium text-right">
                     Actions
                   </th>
@@ -546,9 +546,7 @@ export function DashboardPage() {
                           </span>
                         </td>
 
-                        <td className="px-3 py-2 text-[11px] text-slate-600 dark:text-slate-200">
-                          {sro.start} – {sro.end}
-                        </td>
+                        
 
                         <td className="px-3 py-2 text-right">
                           <button

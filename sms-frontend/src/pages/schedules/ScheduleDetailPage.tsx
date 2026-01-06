@@ -118,7 +118,7 @@ export function ScheduleDetailPage() {
                 {assignedLoading ? "Checking…" : assignedServiceId ? "Assigned Service" : "Not Assigned"}
               </GhostButton>
 
-              <GhostButton onClick={() => navigate(`/schedules/${id}/edit`)} title="Edit schedule">
+              <GhostButton onClick={() => navigate(`/service/schedules/${id}/edit`)} title="Edit schedule">
                 <Edit3 className="h-4 w-4" />
                 Edit
               </GhostButton>
